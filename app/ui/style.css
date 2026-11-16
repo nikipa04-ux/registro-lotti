@@ -1,0 +1,78 @@
+/* ============================================================
+   Registro Lotti - stile dell'interfaccia reale.
+   Stesso linguaggio visivo del prototipo (docs/prototipo.html):
+   variabili di tema, card, badge, tabella. Cambiando i colori
+   in :root cambia tutto il look.
+   ============================================================ */
+:root {
+  --bg: #f4f6f8; --card: #ffffff; --ink: #1f2937; --muted: #6b7280;
+  --line: #e5e7eb; --brand: #0e7490; --brand-dark: #155e75;
+  --red: #dc2626; --red-bg: #fef2f2; --amber: #d97706; --amber-bg: #fffbeb;
+  --green: #16a34a; --green-bg: #f0fdf4;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+       background: var(--bg); color: var(--ink); font-size: 14px; }
+.layout { display: flex; min-height: 100vh; }
+
+/* Navigazione sinistra (come nel prototipo) */
+aside { width: 220px; background: #0f172a; color: #cbd5e1; padding: 16px 0; flex-shrink: 0; }
+.logo { color: #fff; font-weight: 700; font-size: 16px; padding: 0 20px 14px;
+        border-bottom: 1px solid #1e293b; margin-bottom: 10px; }
+.logo small { display: block; font-weight: 400; font-size: 11px; color: #64748b; }
+nav button { display: block; width: 100%; text-align: left; background: none;
+             border: none; color: #cbd5e1; padding: 10px 20px; font-size: 14px;
+             cursor: pointer; }
+nav button:hover:not(.disabled) { background: #1e293b; color: #fff; }
+nav button.active { background: var(--brand); color: #fff; font-weight: 600; }
+nav button.disabled { color: #64748b; cursor: default; font-size: 13px; }
+nav button.disabled small { color: #475569; font-size: 10px; margin-left: 6px; }
+
+/* Area contenuto */
+main { flex: 1; padding: 24px 32px; max-width: 1000px; }
+h1 { font-size: 20px; margin: 0 0 4px; }
+.sub { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
+
+/* Card */
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+        padding: 16px; margin-bottom: 16px; }
+.card h2 { font-size: 14px; margin: 0 0 12px; color: var(--muted);
+           text-transform: uppercase; letter-spacing: .04em; }
+
+/* Tabelle */
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--muted);
+     padding: 8px 10px; border-bottom: 1px solid var(--line); }
+td { padding: 10px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+td.empty { color: var(--muted); text-align: center; }
+
+/* Badge */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px;
+         font-size: 11px; font-weight: 600; }
+.b-red { background: var(--red-bg); color: var(--red); }
+.b-amber { background: var(--amber-bg); color: var(--amber); }
+.b-green { background: var(--green-bg); color: var(--green); }
+.b-gray { background: #f1f5f9; color: var(--muted); }
+.mono { font-family: ui-monospace, monospace; font-size: 12.5px; }
+
+/* Statistiche della dashboard */
+.stats { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+.stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+        padding: 14px 20px; min-width: 150px; }
+.stat .n { font-size: 26px; font-weight: 700; }
+.stat .l { color: var(--muted); font-size: 12px; }
+
+/* Pulsanti */
+.btn { background: var(--brand); color: #fff; border: none; border-radius: 8px;
+       padding: 9px 16px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.btn:hover:not(:disabled) { background: var(--brand-dark); }
+.btn.sec { background: #fff; color: var(--brand); border: 1px solid var(--brand); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.toolbar { display: flex; justify-content: space-between; align-items: center;
+           margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
+
+/* Stato del server e caricamento */
+.conn { font-size: 12px; color: var(--muted); }
+.conn.ok { color: var(--green); font-weight: 600; }
+.conn.err { color: var(--red); font-weight: 600; }
+.loading { color: var(--muted); padding: 20px; text-align: center; }

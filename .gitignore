@@ -1,0 +1,22 @@
+# Ambiente virtuale
+.venv/
+venv/
+
+# Bytecode Python
+__pycache__/
+*.py[cod]
+
+# Test
+.pytest_cache/
+
+# Dati locali: il DB è dell'utente, non del repo (data/.gitkeep resta)
+data/*.db
+data/*.db-journal
+data/*.sqlite*
+
+# Allegati e documenti dei lotti: mai su git
+data/documenti/
+
+# Sistema
+.DS_Store
+Thumbs.db

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Registro Lotti</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="layout">
+
+  <!-- Navigazione (stessa del prototipo; le altre sezioni arrivano nelle
+       prossime iterazioni: la struttura qui sotto è già pronta) -->
+  <aside>
+    <div class="logo">Registro Lotti<small>gestione lotti e scadenze</small></div>
+    <nav>
+      <button class="active">⌂ Dashboard</button>
+      <button class="disabled" title="Prossima iterazione">📥 Arrivi<small>presto</small></button>
+      <button class="disabled" title="Prossima iterazione">🏭 Produzioni<small>presto</small></button>
+      <button class="disabled" title="Prossima iterazione">⏰ Scadenze<small>presto</small></button>
+      <button class="disabled" title="Prossima iterazione">📦 Magazzino<small>presto</small></button>
+      <button class="disabled" title="Prossima iterazione">📇 Anagrafiche<small>presto</small></button>
+    </nav>
+  </aside>
+
+  <main>
+    <h1>Dashboard</h1>
+    <p class="sub"><span id="sub-oggi">…</span> · <span id="conn" class="conn">connessione al server…</span></p>
+
+    <div class="stats" id="stats">
+      <div class="stat"><div class="n">…</div><div class="l">…</div></div>
+    </div>
+
+    <div class="card">
+      <h2>⏰ In scadenza entro 7 giorni</h2>
+      <div id="tabella-scadenze"><div class="loading">carico i dati…</div></div>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn" disabled title="Prossima iterazione">+ Nuovo arrivo</button>
+      <button class="btn sec" disabled title="Prossima iterazione">+ Nuova produzione</button>
+    </div>
+  </main>
+
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

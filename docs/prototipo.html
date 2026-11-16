@@ -1,0 +1,1486 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Registro Lotti - Prototipo UI</title>
+<style>
+  /* Variabili di tema: cambiando questi colori si cambia tutto il look */
+  :root {
+    --bg: #f4f6f8; --card: #ffffff; --ink: #1f2937; --muted: #6b7280;
+    --line: #e5e7eb; --brand: #0e7490; --brand-dark: #155e75;
+    --red: #dc2626; --red-bg: #fef2f2; --amber: #d97706; --amber-bg: #fffbeb;
+    --green: #16a34a; --green-bg: #f0fdf4;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--ink); font-size: 14px; }
+  .layout { display: flex; min-height: 100vh; }
+  /* Colonna di navigazione sinistra */
+  aside { width: 220px; background: #0f172a; color: #cbd5e1; padding: 16px 0; flex-shrink: 0; }
+  .logo { color: #fff; font-weight: 700; font-size: 16px; padding: 0 20px 14px; border-bottom: 1px solid #1e293b; margin-bottom: 10px; }
+  .logo small { display: block; font-weight: 400; font-size: 11px; color: #64748b; }
+  nav button { display: block; width: 100%; text-align: left; background: none; border: none; color: #cbd5e1; padding: 10px 20px; font-size: 14px; cursor: pointer; }
+  nav button:hover { background: #1e293b; color: #fff; }
+  nav button.active { background: var(--brand); color: #fff; font-weight: 600; }
+  /* Area contenuto principale */
+  main { flex: 1; padding: 24px 32px; max-width: 1000px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
+  /* Card: contenitore bianco con bordo arrotondato usato ovunque */
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .card h2 { font-size: 14px; margin: 0 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  td { padding: 10px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+  /* Riga cliccabile: evidenzia al passaggio del mouse */
+  tr.click { cursor: pointer; }
+  tr.click:hover { background: #f8fafc; }
+  /* Badge: piccole etichette colorate */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .b-red { background: var(--red-bg); color: var(--red); }
+  .b-amber { background: var(--amber-bg); color: var(--amber); }
+  .b-blue { background:#e0edff; color:#1d4ed8; }
+  .b-green { background: var(--green-bg); color: var(--green); }
+  .b-gray { background: #f1f5f9; color: var(--muted); }
+  .mono { font-family: ui-monospace, monospace; font-size: 12.5px; }
+  /* Pulsanti: primario pieno e secondario di contorno */
+  .btn { background: var(--brand); color: #fff; border: none; border-radius: 8px; padding: 9px 16px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn:hover { background: var(--brand-dark); }
+  .btn.sec { background: #fff; color: var(--brand); border: 1px solid var(--brand); }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
+  input, select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; background: #fff; }
+  input:focus, select:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+  /* Statistiche della dashboard */
+  .stats { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 20px; min-width: 150px; }
+  .stat .n { font-size: 26px; font-weight: 700; }
+  .stat .l { color: var(--muted); font-size: 12px; }
+  /* Griglie dei form: due colonne, .full occupa tutta la larghezza */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-grid .full { grid-column: 1 / -1; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  label .req { color: var(--red); }
+  label .opt { color: #9ca3af; font-weight: 400; }
+  /* Riga con checkbox per selezionare i lotti da consumare */
+  .check-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; }
+  .check-row.checked { background: #ecfeff; border-color: #a5f3fc; }
+  /* Passi del wizard nuova produzione */
+  .steps { display: flex; gap: 8px; margin-bottom: 16px; }
+  .step { background: #e2e8f0; color: var(--muted); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; }
+  .step.on { background: var(--brand); color: #fff; }
+  .hint { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 16px; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  /* Intestazione card usata nelle anagrafiche: titolo a sinistra, azione a destra */
+  .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .card-head h2 { margin: 0; display: flex; align-items: center; gap: 8px; }
+  /* Lista scrollabile: la card resta compatta quando l'anagrafica si allunga.
+     L'intestazione della tabella resta fissa in alto mentre si scorre. */
+  .scroll-list { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+  .scroll-list table { margin: 0; }
+  .scroll-list th { position: sticky; top: 0; background: #fff; z-index: 1; box-shadow: 0 1px 0 var(--line); }
+  /* Coppia chiave/valore nella scheda dettaglio lotto */
+  .kv { margin-bottom: 8px; }
+  .kv .k { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+  .kv .v { font-size: 15px; font-weight: 600; }
+  /* Combobox: campo di ricerca con tendina filtrata, usata al posto dei select
+     lunghi (100+ ingredienti). Raggruppata per categoria, con "crea nuovo" inline. */
+  .combo { position: relative; }
+  .combo-dd { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: #fff; border: 1px solid var(--line); border-radius: 8px; max-height: 240px; overflow-y: auto; z-index: 50; box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+  .combo-dd .cat { font-size: 10px; text-transform: uppercase; color: var(--muted); padding: 8px 12px 2px; }
+  .combo-dd .it { padding: 8px 12px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  .combo-dd .it:hover, .combo-dd .it.on { background: #ecfeff; }
+  .combo-dd .it .sig { color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; }
+  .combo-dd .new { padding: 10px 12px; cursor: pointer; color: var(--brand); font-weight: 600; border-top: 1px dashed var(--line); }
+  .combo-dd .new:hover { background: #ecfeff; }
+  .back { color: var(--brand); cursor: pointer; font-size: 13px; margin-bottom: 12px; display: inline-block; }
+  .tag-type { font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <div class="logo"> Registro Lotti <small>Gestionale tracciabilità</small></div>
+    <nav id="nav"></nav>
+  </aside>
+  <main id="main"></main>
+</div>
+
+<script>
+/* ============================================================
+   DATI DI ESEMPIO (nel prodotto vero arrivano da SQLite via API)
+   La struttura riflette le tabelle dello schema del database.
+   ============================================================ */
+
+// Tabella fornitori: ora con P. IVA e contatti, necessari alla scheda di modifica
+// Lista lunga di esempio per testare lo scroll delle anagrafiche
+const fornitori = [
+  { id: 1, nome: "Az. Agr. Rossi", piva: "IT01234567890", tel: "02 555 1234", email: "ordini@rossi.it", note: "Consegna il lun e il gio" },
+  { id: 2, nome: "Caseificio De Paolis", piva: "IT09876543210", tel: "02 555 9876", email: "info@depaolis.it", note: "" },
+  { id: 3, nome: "Grossisti Lombardi srl", piva: "IT01112223334", tel: "039 444 5566", email: "vendite@lombardi.it", note: "Minimo d'ordine 50€" },
+  { id: 4, nome: "Molino Chiari", piva: "IT01239988776", tel: "02 444 1122", email: "ordini@molinochiari.it", note: "Farine e semolini" },
+  { id: 5, nome: "Cioccolateria Bonci", piva: "IT01556677889", tel: "0575 555 111", email: "info@bonci.it", note: "Copertura cioccolato" },
+  { id: 6, nome: "Torrefazione JamaicA", piva: "IT01778899001", tel: "035 222 333", email: "ordini@jamaica.it", note: "Caffè in grani" },
+  { id: 7, nome: "Azienda Agricola Bel Sole", piva: "IT01990011223", tel: "055 888 999", email: "belsole@agri.it", note: "Agrumi e frutta fresca" },
+  { id: 8, nome: "Distilleria Valtellina", piva: "IT03322110099", tel: "0342 111 222", email: "info@dvaltellina.it", note: "Marsala e liquori" },
+  { id: 9, nome: "Apicoltura Il Rododendro", piva: "IT01122334455", tel: "011 333 444", email: "ordina@rododendro.it", note: "Miele di acacia" },
+  { id: 10, nome: "Frutta Secca Val di Susa", piva: "IT01445566778", tel: "011 555 666", email: "vdisusa@nocciole.it", note: "Nocciole piemonte" },
+  { id: 11, nome: "Ittica Mare Blu", piva: "IT01667788990", tel: "071 777 888", email: "mareblu@ittica.it", note: "Solo su ordinazione" },
+  { id: 12, nome: "Salumificio Ferrarini", piva: "IT01889900112", tel: "0521 999 000", email: "ordini@ferrarini.it", note: "" },
+  { id: 13, nome: "Ortofrutta Prati Stabili", piva: "IT01001122334", tel: "06 111 222", email: "prati@ortofrutta.it", note: "Consegna ogni mattina" },
+  { id: 14, nome: "Vaniglia del Madagascar SAS", piva: "IT01223344556", tel: "02 666 777", email: "info@vanigliamg.it", note: "Bacche e paste" },
+  { id: 15, nome: "Consorzio Latte Valtellina", piva: "IT01334455667", tel: "0342 888 999", email: "latte@valtellina.it", note: "" },
+  { id: 16, nome: "Pasticceria Sundries Srl", piva: "IT01556677889", tel: "02 999 111", email: "sundries@pasticceria.it", note: "Stampi, sac-à-poche, coloranti" },
+  { id: 17, nome: "Birrificio Artigianale Hop", piva: "IT01778899001", tel: "045 121 212", email: "ordini@hop.it", note: "" },
+  { id: 18, nome: "Fiori Freschi Gardenia", piva: "IT01889900112", tel: "055 343 434", email: "gardenia@fiori.it", note: "Decorazioni torte" },
+];
+
+// Tabella prodotti: un'unica anagrafica con campo 'tipo' (ingrediente / semilaborato / finale)
+// 'costo' = costo standard per unità di misura degli INGREDIENTI (per il food cost).
+// Per ingredienti con arrivi recenti coinciderà con l'ultimo prezzo d'acquisto;
+// per semilavorati/finati NON si inserisce: il loro costo è CALCOLATO dalla ricetta.
+const prodotti = [
+  { id: 1, nome: "Uova pastorizzate", tipo: "ingrediente", um: "kg", sigla: "UOV", note: "Gusci in banca B", costo: 3.20 },
+  { id: 2, nome: "Zucchero semolato", tipo: "ingrediente", um: "kg", sigla: "ZUC", note: "", costo: 1.10 },
+  { id: 3, nome: "Latte fresco intero", tipo: "ingrediente", um: "lt", sigla: "LAT", note: "", costo: 1.40 },
+  { id: 4, nome: "Crema pasticcera", tipo: "semilavorato", um: "kg", sigla: "CRP", note: "Ricetta base" },
+  { id: 5, nome: "Bignè con crema", tipo: "finale", um: "pz", sigla: "BGN", note: "" },
+  { id: 6, nome: "Farina 00", tipo: "ingrediente", um: "kg", sigla: "FAR", note: "W260 panificabile", costo: 1.20 },
+  { id: 7, nome: "Farina di mandorle", tipo: "ingrediente", um: "kg", sigla: "FMD", note: "", costo: 9.80 },
+  { id: 8, nome: "Burro", tipo: "ingrediente", um: "kg", sigla: "BUR", note: "", costo: 8.50 },
+  { id: 9, nome: "Panna fresca", tipo: "ingrediente", um: "lt", sigla: "PAN", note: "35% grassi", costo: 4.60 },
+  { id: 10, nome: "Cioccolato fondente 70%", tipo: "ingrediente", um: "kg", sigla: "CHF", note: "Gocce e coperture", costo: 14.50 },
+  { id: 11, nome: "Cioccolato bianco", tipo: "ingrediente", um: "kg", sigla: "CHB", note: "", costo: 13.00 },
+  { id: 12, nome: "Marsala secco", tipo: "ingrediente", um: "lt", sigla: "MAR", note: "", costo: 9.00 },
+  { id: 13, nome: "Caffè in grani", tipo: "ingrediente", um: "kg", sigla: "CAF", note: "Miscela bar", costo: 16.00 },
+  { id: 14, nome: "Mascarpone", tipo: "ingrediente", um: "kg", sigla: "MSC", note: "", costo: 6.50 },
+  { id: 15, nome: "Lievito di birra", tipo: "ingrediente", um: "kg", sigla: "LIE", note: "Fresco, scadenza corta", costo: 4.00 },
+  { id: 16, nome: "Sale fino", tipo: "ingrediente", um: "kg", sigla: "SAL", note: "", costo: 0.60 },
+  { id: 17, nome: "Vaniglia in bacche", tipo: "ingrediente", um: "pz", sigla: "VAN", note: "Madagascar", costo: 3.50 },
+  { id: 18, nome: "Miele di acacia", tipo: "ingrediente", um: "kg", sigla: "MIE", note: "", costo: 12.00 },
+  { id: 19, nome: "Nocciole tostate", tipo: "ingrediente", um: "kg", sigla: "NOC", note: "Piemonte IGP", costo: 18.00 },
+  { id: 20, nome: "Limoni non trattati", tipo: "ingrediente", um: "kg", sigla: "LIM", note: "Per scorze", costo: 2.80 },
+  { id: 21, nome: "Pasta sfoglia pronta", tipo: "ingrediente", um: "kg", sigla: "PSF", note: "Rotoli surgelati", costo: 7.50 },
+  { id: 22, nome: "Marmellata di albicocche", tipo: "ingrediente", um: "kg", sigla: "MAL", note: "", costo: 4.20 },
+  { id: 23, nome: "Pangrattato", tipo: "ingrediente", um: "kg", sigla: "PGR", note: "", costo: 1.40 },
+  { id: 24, nome: "Farina di farro", tipo: "ingrediente", um: "kg", sigla: "FRF", note: "Per biscotti", costo: 2.60 },
+  { id: 25, nome: "Amido di mais", tipo: "ingrediente", um: "kg", sigla: "AMD", note: "Per creme", costo: 1.90 },
+  { id: 26, nome: "Pan di spagna", tipo: "semilavorato", um: "pz", sigla: "PDS", note: "Dischi da 24cm" },
+  { id: 27, nome: "Crema al cioccolato", tipo: "semilavorato", um: "kg", sigla: "CRC", note: "Ganache" },
+  { id: 28, nome: "Pasta brioche", tipo: "semilavorato", um: "kg", sigla: "BRP", note: "Lievitata" },
+  { id: 29, nome: "Pasta frolla", tipo: "semilavorato", um: "kg", sigla: "FRO", note: "Per crostate" },
+  { id: 30, nome: "Bagna al caffè", tipo: "semilavorato", um: "lt", sigla: "BGC", note: "Per tiramisù", costo: 4.00 },
+  { id: 31, nome: "Tiramisù classico", tipo: "finale", um: "pz", sigla: "TIR", note: "Vassetto 250g" },
+  { id: 32, nome: "Crostata di marmellata", tipo: "finale", um: "pz", sigla: "CRO", note: "" },
+  { id: 33, nome: "Brioche con crema", tipo: "finale", um: "pz", sigla: "BRC", note: "" },
+  { id: 34, nome: "Cannoncini con crema", tipo: "finale", um: "pz", sigla: "CAN", note: "" },
+  { id: 35, nome: "Torta nocciole e miele", tipo: "finale", um: "pz", sigla: "TNM", note: "Whole, 8 porzioni" },
+];
+
+// Tabella lotti_ingresso: un record per ogni arrivo da fornitore.
+// 'qta' = quantità arrivata; 'res' = quantità rimasta in magazzino (scaricata dalle produzioni).
+// 'allegati' = documenti digitali; 'cartaceo' = riferimento al documento fisico (opzionali entrambi)
+// 'pu' = prezzo unitario; 'iva' = aliquota %: totale e totale con IVA sono calcolati
+// let (non const): gli arrivi possono essere eliminati dall'utente
+let ingressi = [
+  { id: 1, prod: 1, forn: 1, lotto: "IT12A45X", arrivo: "2026-11-08", scad: "2026-11-15", qta: 5, res: 1.5, pu: 3.20, iva: 4, allegati: ["DDT_2026_1108.pdf"], cartaceo: null },
+  { id: 2, prod: 2, forn: 3, lotto: "ZUC-8891", arrivo: "2026-11-05", scad: "2027-11-05", qta: 10, res: 7, pu: 1.10, iva: 10, allegati: [], cartaceo: "Cert. analisi in faldone 2026, pag. 12" },
+  { id: 3, prod: 3, forn: 2, lotto: "L0746B", arrivo: "2026-11-11", scad: "2026-11-14", qta: 20, res: 12, pu: 1.40, iva: 4, allegati: [], cartaceo: null },
+  { id: 4, prod: 1, forn: 1, lotto: "IT12A47Z", arrivo: "2026-11-12", scad: "2026-12-10", qta: 5, res: 5, pu: 3.20, iva: 4, allegati: ["DDT_2026_1112.pdf", "foto_banca.jpg"], cartaceo: null },
+  // --- arrivi aggiuntivi per i test ---
+  { id: 5, prod: 6, forn: 4, lotto: "FAR-2026-0451", arrivo: "2026-11-03", scad: "2027-05-03", qta: 25, res: 18.5, pu: 1.20, iva: 10, allegati: ["cert_allergeni_far00.pdf"], cartaceo: null },
+  { id: 6, prod: 6, forn: 4, lotto: "FAR-2026-0462", arrivo: "2026-11-10", scad: "2027-05-10", qta: 25, res: 25, pu: 1.15, iva: 10, allegati: [], cartaceo: "Cert. in faldone 2026, pag. 31" },
+  // Stesso ingrediente (farina 00), MARCA DIVERSA: dimostra il caso
+  // "due marche per lo stesso prodotto" nel magazzino
+  { id: 99, prod: 6, forn: 3, lotto: "FAR-BIO-1123", arrivo: "2026-11-11", scad: "2027-05-11", qta: 10, res: 4, pu: 1.35, iva: 10, marca: "Molino Biolatti", allegati: [], cartaceo: null },
+  { id: 7, prod: 8, forn: 3, lotto: "BUR-7712", arrivo: "2026-11-09", scad: "2026-11-23", qta: 12, res: 4, pu: 8.50, iva: 10, allegati: ["fattura_7712.pdf"], cartaceo: null },
+  { id: 8, prod: 9, forn: 15, lotto: "PAN-99B", arrivo: "2026-11-11", scad: "2026-11-16", qta: 10, res: 9, pu: 4.60, iva: 4, allegati: [], cartaceo: null },
+  { id: 9, prod: 14, forn: 2, lotto: "MSC-2026-311", arrivo: "2026-11-06", scad: "2026-11-20", qta: 6, res: 3.2, pu: 6.50, iva: 4, allegati: [], cartaceo: null },
+  { id: 10, prod: 10, forn: 5, lotto: "CHF-70/2611", arrivo: "2026-11-04", scad: "2027-02-04", qta: 8, res: 6.5, pu: 14.50, iva: 10, allegati: ["cert_analisi_cioccolato.pdf"], cartaceo: null },
+  { id: 11, prod: 13, forn: 6, lotto: "CAF-MIS-BAR-26", arrivo: "2026-11-07", scad: "2027-02-07", qta: 3, res: 2.1, pu: 16.00, iva: 10, allegati: [], cartaceo: "Rif. in faldone 2026, pag. 8" },
+  { id: 12, prod: 19, forn: 10, lotto: "NOC-PIE-1126", arrivo: "2026-11-05", scad: "2027-01-05", qta: 5, res: 4.4, pu: 18.00, iva: 10, allegati: ["foto_colli.jpg"], cartaceo: null },
+  { id: 13, prod: 22, forn: 3, lotto: "MAL-APR-88", arrivo: "2026-10-28", scad: "2027-04-28", qta: 6, res: 5.5, pu: 4.20, iva: 10, allegati: [], cartaceo: null },
+  { id: 14, prod: 21, forn: 16, lotto: "PSF-RO-4412", arrivo: "2026-11-10", scad: "2027-01-10", qta: 15, res: 15, pu: 7.50, iva: 10, allegati: ["ddt_surgelati.pdf"], cartaceo: null },
+  { id: 15, prod: 25, forn: 3, lotto: "AMD-5521", arrivo: "2026-10-20", scad: "2027-10-20", qta: 4, res: 2.8, pu: 1.90, iva: 10, allegati: [], cartaceo: null },
+  { id: 16, prod: 17, forn: 14, lotto: "VAN-MAD-2026", arrivo: "2026-09-15", scad: "2027-09-15", qta: 0.2, res: 0.12, pu: 3.50, iva: 22, allegati: [], cartaceo: null },
+  { id: 17, prod: 12, forn: 8, lotto: "MAR-S-6612", arrivo: "2026-11-02", scad: "2029-11-02", qta: 2, res: 1.7, pu: 9.00, iva: 22, allegati: [], cartaceo: "Etichetta in faldone 2026" },
+  { id: 18, prod: 20, forn: 7, lotto: "LIM-NT-0911", arrivo: "2026-11-09", scad: "2026-11-16", qta: 3, res: 1.9, pu: 2.80, iva: 10, allegati: [], cartaceo: null },
+  { id: 19, prod: 18, forn: 9, lotto: "MIE-ACA-1026", arrivo: "2026-10-26", scad: "2028-10-26", qta: 2, res: 1.6, pu: 12.00, iva: 10, allegati: ["cert_miele.pdf"], cartaceo: null },
+  { id: 20, prod: 15, forn: 12, lotto: "LIE-B-5567", arrivo: "2026-11-08", scad: "2026-11-13", qta: 1, res: 0.2, pu: 4.00, iva: 10, allegati: [], cartaceo: null },
+  // Un arrivo scaduto: per testare il filtro "Scaduti" e la gestione a magazzino
+  { id: 21, prod: 1, forn: 1, lotto: "IT10B31Y", arrivo: "2026-10-28", scad: "2026-11-10", qta: 3, res: 0, pu: 3.20, iva: 4, allegati: [], cartaceo: "DDT in faldone 2026, pag. 44" },
+];
+
+// Tabella lotti_interni: un record per ogni produzione in negozio.
+// 'modificata' = true se in quella produzione la ricetta è stata variata
+// (es. dose ridotta o ingrediente sostituito): la ricetta standard non cambia,
+// ma lo storico conserva il fatto che quella produzione è uscita dallo standard.
+const interni = [
+  { id: 1, prod: 4, fam: "Creme", lotto: "CRP-20261109-01", prodData: "2026-11-09", scad: "2026-11-14", modificata: false },
+  { id: 2, prod: 5, fam: "Dolci finiti", lotto: "BGN-20261110-01", prodData: "2026-11-10", scad: "2026-11-11", modificata: true, noteMod: "Dose ridotta: crema 3 → 2 kg (fine serata)" },
+];
+
+// Tabella consumi: collega ogni lotto interno ai lotti che ha consumato.
+// 'origine' distingue se il lotto consumato era in ingresso o interno:
+// è questo campo che rende la catena ricorsiva (uovo → crema → bignè).
+const consumi = [
+  { interno: 1, orig: "ingresso", from: 1, qta: 2 },
+  { interno: 1, orig: "ingresso", from: 2, qta: 1.5 },
+  { interno: 1, orig: "ingresso", from: 3, qta: 4 },
+  { interno: 2, orig: "interno", from: 1, qta: 3 },
+  // Uova usate DIRETTAMENTE nella produzione dei bignè (oltre a quelle già
+  // dentro la crema): serve a dimostrare la FUSIONE in etichetta — le uova
+  // compaiono UNA volta sola, con la quantità totale (dentro-crema + dirette)
+  { interno: 2, orig: "ingresso", from: 4, qta: 0.5 },
+];
+
+// Tabella ricette: per ogni prodotto interno definisce la composizione.
+// 'righe' elenca gli ingredienti con la quantità per dose completa.
+// 'resaN'/'resaUm' = resa base in forma numerica, serve al calcolatore dinamico:
+// indicando una resa desiderata, tutte le quantità scalano proporzionalmente.
+// La ricetta è ciò che rende automatica la tracciabilità: selezionato il
+// prodotto da produrre, l'app propone già i lotti giusti da consumare.
+const ricette = [
+  { id: 1, prod: 4, fam: "Creme", resa: "5 kg", resaN: 5, resaUm: "kg", note: "1. Scaldare il latte con metà dello zucchero, senza bollire.\n2. In ciotola: tuorli, zucchero rimasto e amido, montare con la frusta.\n3. Versare il latte caldo sui tuorli mescolando, riportare tutto in pentola.\n4. Cuocere a fiamma media girando SEMPRE finché la crema vela il cucchiaio.\n5. Fuori dal fuoco: eventuale vaniglia, coprire a contatto e raffreddare veloce.\nConservare in frigo 24-48h max.", righe: [
+    { p: 1, q: 2 },   // uova pastorizzate
+    { p: 2, q: 1.5 }, // zucchero semolato
+    { p: 3, q: 4 },   // latte fresco intero
+    { p: 25, q: 0.4 } // amido di mais
+  ]},
+  { id: 2, prod: 5, fam: "Dolci finiti", resa: "60 pz", resaN: 60, resaUm: "pz", note: "", righe: [
+    { p: 4, q: 3 },   // crema pasticcera (semilavorato)
+    { p: 8, q: 1 }    // burro
+  ]},
+  { id: 3, prod: 31, fam: "Dolci finiti", resa: "25 vassetti", resaN: 25, resaUm: "vassetti", note: "Tiramisù classico", righe: [
+    { p: 14, q: 2 },  // mascarpone
+    { p: 1, q: 0.5 }, // uova pastorizzate
+    { p: 2, q: 0.5 }, // zucchero
+    { p: 30, q: 1 }   // bagna al caffè (semilavorato)
+  ]},
+  { id: 4, prod: 29, fam: "Impasti e basi", resa: "4 kg", resaN: 4, resaUm: "kg", note: "Per crostate", righe: [
+    { p: 6, q: 2 },   // farina 00
+    { p: 8, q: 1 },   // burro
+    { p: 2, q: 0.8 }, // zucchero
+    { p: 1, q: 0.4 }  // uova
+  ]},
+];
+// Trova la ricetta di un prodotto (se esiste)
+const R = prodId => ricette.find(r => r.prod === prodId);
+// Stato del calcolatore: resa desiderata per la ricetta aperta (vuota = dose base)
+let resaTarget = {};
+
+// STORICO PREZZI per ingrediente: coppie [data, prezzo unitario].
+// Nel backend vero nasce dalla tabella arrivi (ogni arrivo porta data+prezzo):
+// qui è campionato per la demo. Serve ai grafici di andamento del food cost.
+const STORICO = {
+  1:  [["2026-05-05",2.90],["2026-06-10",3.05],["2026-08-03",3.05],["2026-10-02",3.20],["2026-11-08",3.20]], // uova
+  2:  [["2026-05-05",0.95],["2026-07-15",1.00],["2026-09-20",1.05],["2026-11-05",1.10]], // zucchero
+  3:  [["2026-05-05",1.25],["2026-06-15",1.30],["2026-07-25",1.35],["2026-09-05",1.38],["2026-10-20",1.40],["2026-11-11",1.40]], // latte
+  25: [["2026-05-05",1.60],["2026-08-10",1.75],["2026-11-03",1.90]], // amido
+  8:  [["2026-05-05",7.80],["2026-07-01",8.00],["2026-09-01",8.30],["2026-11-09",8.50]], // burro
+  14: [["2026-05-05",5.90],["2026-08-01",6.20],["2026-11-06",6.50]], // mascarpone
+  6:  [["2026-05-05",1.05],["2026-08-15",1.12],["2026-11-03",1.20],["2026-11-10",1.15]], // farina
+};
+// Prezzo di un ingrediente alla data d: l'ultimo prezzo registrato ≤ d
+function priceAt(pId, d) {
+  const h = STORICO[pId];
+  if (!h) return P(pId).costo;
+  let v = h[0][1];
+  for (const [dt, pu] of h) if (dt <= d) v = pu;
+  return v;
+}
+// Food cost per unità del prodotto di una ricetta, calcolato alla data d
+// (ricorsivo anche sui semilavorati, come il costo corrente)
+function costoUnitaAt(pId, d) {
+  const p = P(pId);
+  if (p.tipo === "ingrediente") return priceAt(pId, d);
+  const r = R(pId);
+  if (!r) return p.costo || 0;
+  return r.righe.reduce((s, l) => s + l.q * costoUnitaAt(l.p, d), 0) / r.resaN;
+}
+
+// FEFO (First Expired, First Out): assegnazione automatica dei lotti.
+// Dato l'ingrediente e la quantità richiesta, riempie partendo dal lotto
+// che scade prima (a parità, il più vecchio). È la logica HACCP corretta e
+// scala a qualunque numero di lotti: l'operatore conferma, al massimo corregge.
+function fefo(prodId, reqQ) {
+  const lots = [
+    ...ingressi.filter(a => a.prod === prodId && daysTo(a.scad) >= 0).map(a=>({...a, isIn:true})),
+    ...interni.filter(a => a.prod === prodId && daysTo(a.scad) >= 0).map(a=>({...a, isIn:false}))
+  ].sort((x,y) => x.scad === y.scad ? x.arrivo.localeCompare(y.arrivo) : x.scad.localeCompare(y.scad));
+  let rem = reqQ; const asg = [];
+  for (const c of lots) { if (rem <= 0) break; const take = Math.min(c.res, rem); asg.push({ c, take }); rem -= take; }
+  return { asg, rem }; // rem > 0 = quantità non coperta dalle giacenze
+}
+// Stato della selezione lotti in nuova produzione: modalità manuale per riga
+// e testo di ricerca typeahead (chiave: 'r'+ix righe ricetta, 'a'+i aggiunte)
+let manualKeys = {}, lotSearch = {};
+function togMan(k) { manualKeys[k] = !manualKeys[k]; render(); }
+function setLotSearch(k, v) { lotSearch[k] = v; render(); keepFocus("ls-" + k); }
+// Rendering condiviso della selezione lotti per una riga (FEFO + typeahead).
+// Nel riepilogo FEFO si mostrano al massimo 2 lotti con checkbox: se la
+// quantità richiede più lotti, il resto resta accessibile da "✏️ cambia lotti".
+function renderLotti(prodId, reqQ, key) {
+  const p = P(prodId);
+  const { asg, rem } = fefo(prodId, reqQ);
+  const vis = asg.slice(0, 2); // massimo 2 caselle visibili
+  const extra = asg.length - vis.length;
+  const chips = vis.map(x => '<div class="check-row checked" style="margin-bottom:4px">' +
+    '<input type="checkbox" checked><div><span class="mono">' + x.c.lotto + '</span> <b>× ' + x.take + ' ' + p.um + '</b> ' + scadBadge(x.c.scad) +
+    '<div style="font-size:11px;color:var(--muted)">' + (x.c.isIn ? F(x.c.forn).nome : "lotto interno") + '</div></div></div>').join("") +
+    (extra > 0 ? '<div style="font-size:12px;color:var(--muted);margin:2px 0 4px">+ ' + extra + ' altro/i lotto/i (vedi "cambia lotti")</div>' : "");
+  const warn = rem > 0 ? '<div class="hint" style="margin:6px 0 0;background:var(--red-bg);border-color:#fecaca;color:var(--red);padding:6px 10px;font-size:12px">⚠ Giacenze insufficienti: mancano ' + rem.toFixed(2).replace(".", ",") + ' ' + p.um + '</div>' : "";
+  if (!manualKeys[key])
+    return chips + warn +
+      '<button class="btn sec" style="padding:2px 8px;font-size:11px;margin-top:4px" onclick="togMan(\'' + key + '\')">✏️ cambia lotti</button>';
+  // Modalità manuale: typeahead sul codice + lista filtrata
+  const t = (lotSearch[key] || "").toLowerCase();
+  const all = [
+    ...ingressi.filter(a => a.prod === prodId && daysTo(a.scad) >= 0).map(a=>({...a, isIn:true})),
+    ...interni.filter(a => a.prod === prodId && daysTo(a.scad) >= 0).map(a=>({...a, isIn:false}))
+  ].filter(c => !t || c.lotto.toLowerCase().includes(t));
+  const list = all.map(c => { const isInAsg = asg.find(x => x.c.lotto === c.lotto);
+    return '<div class="check-row' + (isInAsg ? " checked" : "") + '"><input type="checkbox" ' + (isInAsg ? "checked" : "") + '>' +
+      '<div><span class="mono">' + c.lotto + '</span> · ' + c.res + ' ' + p.um + ' disp. ' + scadBadge(c.scad) +
+      '<div style="font-size:11px;color:var(--muted)">' + (c.isIn ? F(c.forn).nome : "lotto interno") + '</div></div></div>'; }).join("");
+  return chips + warn +
+    '<input id="ls-' + key + '" placeholder="Cerca per codice lotto..." style="width:100%;margin:6px 0" value="' + (lotSearch[key] || "") + '" oninput="setLotSearch(\'' + key + '\', this.value)">' +
+    (list || "<p style='color:var(--muted);font-size:12px'>Nessun lotto corrisponde alla ricerca</p>") +
+    '<button class="btn sec" style="padding:2px 8px;font-size:11px;margin-top:4px" onclick="togMan(\'' + key + '\')">✓ Conferma selezione (FEFO)</button>';
+}
+
+// MARCA / PRODUTTORE per ingrediente acquistato (richiesta del pasticcere:
+// per la tracciabilità serve anche chi ha FABBRICATO il prodotto, non solo
+// chi lo vende). Nel backend: colonna "marca" della tabella prodotti.
+const MARCA = {
+  1: "Fattoria San Rocco", 2: "Eridania", 3: "Centrale del Latte", 6: "Molino Chiari",
+  7: "Molino Chiari", 8: "Latterie Tirolese", 9: "Granarolo", 10: "Cacao Bonci",
+  11: "Cacao Bonci", 12: "Florio", 13: "Torrefazione Barbera", 14: "De Paolis",
+  15: "Lesaffre", 16: "Nielsen-Massey", 17: "vaniglia Madagascar (Nielsen-Massey)",
+  18: "Barilla", 19: "Nocciole Piemonte IGP", 20: "Limoni di Sicilia", 21: "Surgelati Orogel",
+  22: "Rigoni di Asiago", 23: "Molino Chiari", 24: "Molino Vita", 25: "Amido Fabri",
+};
+
+// FAMIGLIE dei prodotti di laboratorio (richiesta pasticcere): sostituiscono
+// le vecchie categorie tecniche "semilavorato/finale".
+// Es.: crema pasticcera e crema inglese → famiglia "Creme".
+// (Sottofamiglia rimandata a dopo: si riaggiungerà come colonna opzionale.)
+// Nel backend: colonna "famiglia" su prodotti (NULL = ingrediente acquistato);
+// la ricetta porta la sua famiglia, la produzione ne registra una propria
+// (snapshot): cambiare in produzione NON tocca la ricetta master.
+// Le famiglie sono un elenco GESTIBILE dall'anagrafiche (add/edit/remove),
+// non una lista fissa nel codice. Nel backend: tabella famiglie(id, nome)
+// con le tabelle che la referenziano via chiave esterna.
+let famiglie = ["Creme", "Impasti e basi", "Bagnature e sirupi", "Dolci finiti"];
+let famEdit = null, famNew = "", famMsg = null, famNewOpen = false;
+function setFamEdit(i) { famEdit = i; render(); }
+function setFamNew(v) { famNew = v; render(); keepFocus("famNew"); }
+// Il "+ Nuovo" della card Famiglie apre la riga di creazione in cima alla
+// lista (come le altre card: l'azione di creazione sta in testata)
+function togFamNew() { famNewOpen = !famNewOpen; famNew = ""; famEdit = null; render(); if (famNewOpen) keepFocus("famNew"); }
+function addFam() { if (famNew && !famiglie.includes(famNew)) { famiglie.push(famNew); } famNew = ""; famNewOpen = false; render(); }
+// Rinominare una famiglia la propaga ovunque la si usi (nel backend vero la
+// FK fa il lavoro da sola: qui simuliamo l'effetto sui dati di demo).
+function saveFam(i, v) {
+  const old = famiglie[i];
+  if (v && !famiglie.includes(v)) {
+    famiglie[i] = v;
+    Object.keys(PFAM).forEach(k => { if (PFAM[k] === old) PFAM[k] = v; });
+    ricette.forEach(r => { if (r.fam === old) r.fam = v; });
+    interni.forEach(a => { if (a.fam === old) a.fam = v; });
+  }
+  famEdit = null; render();
+}
+// Eliminazione bloccata se la famiglia è già in uso (stessa regola degli arrivi)
+function delFam(i) {
+  const f = famiglie[i];
+  const usata = prodotti.some(p => PFAM[p.id] === f) || ricette.some(r => r.fam === f);
+  if (usata) { famMsg = "❌ Impossibile eliminare: la famiglia \"" + f + "\" è usata da prodotti o ricette."; render(); return; }
+  famiglie.splice(i, 1); famMsg = null; render();
+}
+// famiglia di default dei prodotti di laboratorio in anagrafica
+const PFAM = {
+  4: "Creme", 5: "Dolci finiti", 26: "Impasti e basi", 27: "Creme",
+  28: "Impasti e basi", 29: "Impasti e basi", 30: "Bagnature e sirupi",
+  31: "Dolci finiti", 32: "Dolci finiti", 33: "Dolci finiti",
+  34: "Dolci finiti", 35: "Dolci finiti",
+};
+// Selettore famiglia (un solo livello per ora)
+let famSel = {};
+function setFam(k, v) { famSel[k] = v; render(); }
+function famBadge(p) { return PFAM[p.id] ? '<span class="badge b-amber">' + PFAM[p.id] + '</span>' : ""; }
+function renderFamSel(k, curF) {
+  const f = famSel[k] || curF;
+  return '<select style="width:100%" onchange="setFam(\'' + k + '\', this.value)">' +
+    famiglie.map(x => '<option' + (x === f ? " selected" : "") + '>' + x + '</option>').join("") + '</select>';
+}
+
+// Marca del SINGOLO LOTTO: il default viene dall'anagrafica prodotto, ma
+// ogni arrivo può registrare una marca diversa (es. due marche di farina).
+// È la regola giusta per la tracciabilità: la marca è un fatto dell'acquisto.
+const brandOf = a => a.marca || MARCA[a.prod];
+
+// DENOMINAZIONE LEGALE: la dicitura esatta dell'etichetta d'acquisto
+// (es. "farina 00" in anagrafica → "Farina di grano tenero tipo 00" in
+// etichetta). Assegnata a mano in anagrafica, suggerita già precompilata
+// dal nome. È quello che finisce nell'etichetta del prodotto finito.
+const DENOM = {
+  1: "Uova pastorizzate liquide", 2: "Zucchero semolato", 3: "Latte fresco intero pastorizzato",
+  6: "Farina di grano tenero tipo 00", 7: "Farina di mandorle", 8: "Burro",
+  9: "Panna fresca pastorizzata", 10: "Cioccolato fondente extra 70%", 11: "Cacao amaro in polvere",
+  12: "Vino Marsala", 13: "Caffè in grani tostato", 14: "Mascarpone",
+  15: "Lievito di birra fresco", 16: "Sale fino da cucina", 17: "Bacche di vaniglia",
+  18: "Miele di acacia", 19: "Nocciole tostate", 20: "Limoni non trattati",
+  21: "Pasta sfoglia surgelata", 22: "Confettura di albicocche", 23: "Pangrattato",
+  24: "Farina di farro", 25: "Amido di mais",
+};
+const denomOf = p => DENOM[p.id] || p.nome;
+
+// ETICHETTA CALCOLATA (opzione A: tutto dal verbale, nessuno snapshot).
+// La lista ingredienti di un lotto interno si costruisce per RICORSIONE
+// lungo i consumi. Accumulatore PER PRODOTTO DI ORIGINE: se uso crema
+// (che contiene uova) E uova direttamente, le uova si FONDONO in una riga
+// sola con quantità sommate — mai due voci "uova" in etichetta.
+function ingLotto(lid, acc, factor) {
+  acc = acc || {};
+  const f = factor == null ? 1 : factor;
+  consumi.filter(c => c.interno === lid).forEach(c => {
+    if (c.orig === "ingresso") {
+      const a = ingressi.find(x => x.id === c.from);
+      acc[a.prod] = acc[a.prod] || { qta: 0, um: P(a.prod).um };
+      acc[a.prod].qta += c.qta * f;
+    } else {
+      // Lotto interno consumato: si scala per la frazione usata.
+      // Nel backend vero si divide per la quantità PRODOTTA del lotto
+      // (colonna su lotti_interni); qui per la resa della sua ricetta.
+      const src = interni.find(x => x.id === c.from);
+      const resa = R(src.prod) ? R(src.prod).resaN : 1;
+      ingLotto(c.from, acc, f * (c.qta / resa));
+    }
+  });
+  return acc;
+}
+// UNICA funzione che produce denominazioni E allergeni dell'etichetta.
+// La Q.TÀ NON si mostra (non serve in etichetta) ma si calcola lo stesso:
+// per legge l'ordine degli ingredienti è decrescente di peso all'uso,
+// quindi la quantità decide l'ordine delle righe.
+function etichettaHtml(lid) {
+  const acc = ingLotto(lid);
+  const rows = Object.entries(acc).map(([pid, d]) => ({ p: P(+pid), qta: d.qta }))
+    .sort((a, b) => b.qta - a.qta);
+  const allSet = new Set();
+  rows.forEach(r => allergeniDi(r.p.id).forEach(x => allSet.add(x)));
+  const righe = rows.map(r =>
+    '<tr><td><b>' + denomOf(r.p) + '</b></td><td>' +
+    (allergeniDi(r.p.id).length ? allergeniDi(r.p.id).map(allergBadge).join("") : "") + '</td></tr>').join("");
+  const contiene = allSet.size
+    ? '<div style="margin-top:12px;font-weight:600;color:var(--red)">Contiene: ' +
+      [...allSet].map(i => ALL[i][0]).sort().join(", ") + '</div>'
+    : '<div style="margin-top:12px;color:var(--muted)">Nessun allergene dagli ingredienti usati.</div>';
+  return '<table><tr><th>Ingrediente (denominazione legale)</th><th>Allergeni</th></tr>' + righe + '</table>' + contiene;
+}
+
+// CONSERVAZIONE: dove si trova fisicamente l'ingrediente (frigo, freezer,
+// magazzino asciutto). Serve al magazzino per dire DOVE andare a prendere
+// la roba, non solo quanta ce n'è. Nel backend: colonna 'conservazione' su
+// prodotti (Frigo | Freezer | Magazzino), estendibile con celle custom.
+const CONS_LIST = ["Frigo", "Freezer", "Magazzino"];
+const CONS_ICON = { "Frigo": "🧊", "Freezer": "❄️", "Magazzino": "📦" };
+const CONS = {
+  1: "Frigo", 2: "Magazzino", 3: "Frigo", 6: "Magazzino", 7: "Magazzino",
+  8: "Frigo", 9: "Frigo", 10: "Magazzino", 11: "Magazzino", 12: "Magazzino",
+  13: "Magazzino", 14: "Frigo", 15: "Frigo", 16: "Magazzino", 17: "Magazzino",
+  18: "Magazzino", 19: "Magazzino", 20: "Frigo", 21: "Freezer", 22: "Magazzino",
+  23: "Magazzino", 24: "Magazzino", 25: "Magazzino",
+};
+const consBadge = c => c ? '<span class="badge b-blue" title="Luogo di conservazione">' + (CONS_ICON[c] || "") + " " + c + "</span>" : "";
+
+// ALLERGENI: i 14 allergeni obbligatori da etichetta (Reg. UE 1169/2011).
+// Regola: gli INGREDIENTI li dichiarano (chips cliccabili in anagrafica);
+// i PRODOTTI DI LABORATORIO li EREDITANO dalla ricetta (unione ricorsiva
+// di tutti gli ingredienti usati): nessuno può dimenticare un allergene.
+// Nel backend: tabella allergeni + many-to-many con prodotti; sui lotti
+// interni SNAPSHOT del calcolo al momento della produzione.
+const ALL = [
+  ["Glutine", "cereali contenenti glutine: grano, segale, orzo, avena, farro, kamut, ibridi e derivati"],
+  ["Crostacei", "gamberi, scampi, aragoste, granchi (marini e d'acqua dolce) e derivati"],
+  ["Uova", "tutti i prodotti composti con uova, anche in parte minima"],
+  ["Pesce", "tutti i prodotti alimentari che si compongono di pesce, anche in piccole percentuali"],
+  ["Arachidi", "snack confezionati, creme e condimenti anche in piccole dosi"],
+  ["Soia", "latte di soia, tofu, salse e derivati"],
+  ["Latte", "yogurt, creme, gelati e ogni prodotto in cui è usato il latte"],
+  ["Frutta a guscio", "mandorle, nocciole, noci, noci di acagiù/pecan/Brasile/Queensland, pistacchi e derivati"],
+  ["Sedano", "presente in pezzi più o meno grandi, estratti e derivati"],
+  ["Senape", "salse, condimenti e derivati"],
+  ["Semi di sesamo", "semi, paste, oli e derivati"],
+  ["Solfiti", "vini, marsala, conservanti a base di SO2"],
+  ["Lupini", "farine e derivati"],
+  ["Molluschi", "cozze, vongole, ostriche, seppie, lumachine e derivati"],
+];
+// allergeni DICHIARATI per ingrediente (indici in ALL)
+const ALLERG = {
+  1: [2],          // uova pastorizzate
+  3: [6],          // latte
+  6: [0], 7: [0, 7], 8: [6], 9: [6], 10: [5, 6], 12: [11],
+  14: [6], 19: [7], 21: [0, 6], 23: [0], 24: [0],
+};
+const allergBadge = i => '<span class="badge b-red" style="margin-right:3px" title="' + ALL[i][1] + '">⚠ ' + ALL[i][0] + '</span>';
+// Allergeni di un prodotto: dichiarati per gli ingredienti, EREDITATI dalla
+// ricetta per i prodotti di laboratorio (ricorsivo sui semilavorati)
+function allergeniDi(pid) {
+  if (ALLERG[pid]) return ALLERG[pid];
+  const ric = ricette.find(r => r.prod === pid);
+  if (ric) { const set = new Set(); ric.righe.forEach(l => allergeniDi(l.p).forEach(x => set.add(x))); return [...set]; }
+  return [];
+}
+function togAllerg(pid, i) {
+  ALLERG[pid] = ALLERG[pid] || [];
+  const ix = ALLERG[pid].indexOf(i);
+  if (ix >= 0) ALLERG[pid].splice(ix, 1); else ALLERG[pid].push(i);
+  render();
+}
+// Categorie merceologiche: RIMOSSE (nov 2026, richiesta pasticcere).
+// La tassonomia vera è: famiglie per i prodotti di laboratorio (anagrafiche),
+// conservazione per gli ingredienti. Usate dal combobox per i gruppi.
+
+// COMBOBOX riutilizzabile: campo con tendina filtrata per nome o sigla,
+// raggruppata per categoria, con opzione "crea nuovo" inline.
+// 'key' = chiave di stato; 'tipo' = "ingrediente" | "lavorati" (non ingredienti)
+// | "riga" (ingredienti+semilavorati, per le righe di ricetta) | "fornitore".
+// opts: { sel: id iniziale, onPick: nome fn(key,id), onQuery: nome fn(key,v) }
+let comboState = {};
+function setCQ(key, v) { comboState[key] = { ...(comboState[key]||{}), q: v, open: true }; render(); keepFocus("cb-" + key); }
+function pickC(key, id) { comboState[key] = { q: "", sel: id, open: false }; render(); }
+function toggleC(key) { comboState[key] = { ...(comboState[key]||{q:"",sel:0}), open: !(comboState[key]||{}).open }; render(); keepFocus("cb-" + key); }
+function newC(key) { /* nel backend vero: apre la creazione rapida e riposiziona qui */ comboState[key] = { q: "", sel: 0, open: false }; render(); }
+// Pick/query custom per le righe aggiunte in produzione: aggiornano agg[i]
+function pickAgg(key, id) { const i = Number(key.slice(3)); agg[i] = { ...(agg[i]||{}), prod: id }; comboState[key] = { q: "", sel: id, open: false }; render(); }
+function queryAgg(key, v) { comboState[key] = { ...(comboState[key]||{}), q: v, open: true }; render(); keepFocus("cb-" + key); }
+function renderCombo(key, placeholder, tipo, opts) {
+  opts = opts || {};
+  const st = comboState[key] || { q: "", sel: opts.sel || 0, open: false };
+  const q = (st.q || "").toLowerCase();
+  const selName = st.sel ? (tipo === "fornitore" ? F(st.sel) : P(st.sel)) : null;
+  const selNameStr = selName ? selName.nome : "";
+  // Candidati secondo il tipo richiesto, ricerca per nome o sigla (o P. IVA per i fornitori)
+  let pool = tipo === "fornitore" ? fornitori : prodotti.filter(p =>
+    tipo === "ingrediente" ? p.tipo === "ingrediente" :
+    tipo === "lavorati" ? p.tipo !== "ingrediente" :
+    tipo === "riga" ? (p.tipo === "ingrediente" || p.tipo === "semilavorato") : true);
+  let cand = pool.filter(x => !q || x.nome.toLowerCase().includes(q) ||
+    (x.sigla && x.sigla.toLowerCase().includes(q)) || (x.piva && x.piva.toLowerCase().includes(q)));
+  // Raggruppa la tendina secondo la tassonomia VERA dell'anagrafica:
+  // prodotti di laboratorio per FAMIGLIA (gestita in anagrafiche),
+  // ingredienti per CONSERVAZIONE (frigo/freezer/magazzino). Le vecchie
+  // categorie merceologiche non esistono più.
+  const groups = {};
+  if (tipo === "fornitore") groups["Tutti i fornitori"] = cand;
+  else cand.forEach(p => {
+    const c = p.tipo !== "ingrediente"
+      ? (PFAM[p.id] || "Senza famiglia")
+      : "🧊 " + (CONS[p.id] || "Da sistemare");
+    (groups[c] = groups[c] || []).push(p);
+  });
+  const onPick = opts.onPick || "pickC", onQuery = opts.onQuery || "setCQ";
+  const dd = !st.open ? "" : '<div class="combo-dd">' +
+    (q && !cand.some(x => x.nome.toLowerCase() === q) ? '<div class="new" onclick="newC(\'' + key + '\')">➕ Crea "' + st.q + '" (va in anagrafiche)</div>' : "") +
+    Object.entries(groups).map(([c, ps]) =>
+      '<div class="cat">' + c + '</div>' + ps.map(x =>
+        '<div class="it' + (selNameStr && selNameStr === x.nome ? " on" : "") + '" onclick="' + onPick + '(\'' + key + '\',' + x.id + ')"><span>' + x.nome + '</span><span class="sig">' + (x.sigla || "") + '</span></div>'
+      ).join("")
+    ).join("") + (cand.length ? "" : '<div style="padding:10px 12px;color:var(--muted)">Nessun risultato</div>') +
+    '</div>';
+  return '<div class="combo">' +
+    '<input id="cb-' + key + '" style="width:100%" placeholder="' + placeholder + '" value="' +
+    (selNameStr ? selNameStr : (st.q || "")) + '" oninput="' + onQuery + '(\'' + key + '\', this.value)" onclick="toggleC(\'' + key + '\')">' +
+    dd + '</div>';
+}
+// FOOD COST: costo per unità di misura di qualsiasi prodotto.
+// Ingrediente → costo standard d'acquisto.
+// Semilavorato/finale → CALCOLATO ricorsivamente dalla ricetta:
+// (somma quantità×costo degli ingredienti) / resa. La crema costa quanto
+// le sue uova+latte+zucchero, il bignè quanto la sua crema+burro.
+const memoCosto = {}; // cache: evita ricalcoli su catene lunghe
+function costoUnita(pId) {
+  if (memoCosto[pId] !== undefined) return memoCosto[pId];
+  const p = P(pId);
+  let c = null;
+  if (p.tipo === "ingrediente") {
+    // Se ci sono arrivi recenti, il costo standard può corrispondere all'ultimo prezzo
+    c = p.costo !== undefined ? p.costo : null;
+  } else {
+    const r = R(pId);
+    if (r) {
+      // Somma i costi delle righe e divide per la resa numerica
+      const tot = r.righe.reduce((s,l) => s + l.q * costoUnita(l.p), 0);
+      c = tot / r.resaN;
+    } else if (p.costo !== undefined) {
+      c = p.costo; // semilavorato senza ricetta: costo standard manuale
+    }
+  }
+  memoCosto[pId] = c;
+  return c;
+}
+
+/* ============================================================
+   UTILITÀ CONDIVISE
+   ============================================================ */
+
+// Scorciatoie per cercare anagrafiche per id
+const P = id => prodotti.find(p => p.id === id);
+const F = id => fornitori.find(f => f.id === id);
+
+// Giorn che mancano alla scadenza rispetto alla "data corrente" simulata (12/11/2026)
+// Nota: new Date("2026-11-15") è a mezzanotte UTC, quindi Math.round evita diff di ora
+const daysTo = d => Math.round((new Date(d) - new Date("2026-11-12")) / 86400000);
+
+// Genera il badge colorato della scadenza: rosso ≤3gg, ambra ≤7gg, verde oltre
+const scadBadge = d => {
+  const n = daysTo(d);
+  if (n < 0) return '<span class="badge b-gray">scaduto</span>';
+  if (n <= 3) return '<span class="badge b-red">' + d + ' · ' + n + 'g</span>';
+  if (n <= 7) return '<span class="badge b-amber">' + d + ' · ' + n + 'g</span>';
+  return '<span class="badge b-green">' + d + '</span>';
+};
+
+// Badge sintetico dei documenti di un arrivo: digitali, cartacei o nessuno
+const allBadge = a => a.allegati.length ? '<span class="badge b-green" style="cursor:pointer" title="Clic: apre i documenti allegati" onclick="event.stopPropagation();apriDoc(' + a.id + ')">' + a.allegati.length + ' allegato/i</span>' : (a.cartaceo ? '<span class="badge b-gray">cartaceo</span>' : '<span class="badge b-gray">—</span>');
+// Simulazione apertura documento: nel backend vero il clic chiama l'API locale
+// che apre il file con l'app predefinita del sistema (os.startfile / xdg-open)
+function apriDoc(id) { docMsg = "📄 Apertura documento... (nel backend: apre il file con l'app predefinita del PC)"; render(); }
+let docMsg = null;
+
+// Calcoli fiscali di un arrivo: totale = qta × prezzo unitario; con IVA = totale × (1 + iva/100)
+const tot = a => (a.qta * a.pu);
+const totIva = a => tot(a) * (1 + a.iva / 100);
+const eur = n => n.toFixed(2).replace(".", ",") + " €";
+
+/* ============================================================
+   VISTE DELL'APPLICAZIONE
+   Ogni voce ha un'etichetta (se sta nel menu) e una funzione render
+   che restituisce l'HTML. La navigazione chiama go() che rirenderizza.
+   ============================================================ */
+
+const views = {
+  dashboard: { label: "⌂ Dashboard", render: () => {
+    // Alert: lotti in scadenza nei prossimi 7 giorni (sia ingressi che interni), per urgenza
+    const alert = [...ingressi, ...interni].filter(x => x.scad && daysTo(x.scad) >= 0 && daysTo(x.scad) <= 7)
+      .sort((a,b) => a.scad.localeCompare(b.scad));
+    const rows = alert.map(a => {
+      const isIn = !!a.forn; // se ha il fornitore è un ingresso, altrimenti un lotto interno
+      return '<tr class="click" onclick="go(\'dettaglio\',\'' + (isIn ? "i" : "n") + '\',' + a.id + ')">' +
+        '<td><b>' + P(a.prod).nome + '</b><br><span class="mono">' + a.lotto + '</span></td>' +
+        '<td>' + (isIn ? F(a.forn).nome : "produzione interna") + '</td>' +
+        '<td>' + scadBadge(a.scad) + '</td></tr>';
+    }).join("");
+    return '<h1>Dashboard</h1><p class="sub">Oggi è giovedì 12 novembre 2026 · <b>Azienda Demo</b></p>' +
+      '<div class="stats">' +
+      '<div class="stat"><div class="n" style="color:var(--red)">' + alert.filter(a=>daysTo(a.scad)<=3).length + '</div><div class="l">Scadenze critiche (≤3 giorni)</div></div>' +
+      '<div class="stat"><div class="n">' + ingressi.filter(a=>a.arrivo>="2026-11-06").length + '</div><div class="l">Arrivi ultima settimana</div></div>' +
+      '<div class="stat"><div class="n">' + interni.length + '</div><div class="l">Produzioni registrate</div></div></div>' +
+      '<div class="card"><h2>⏰ In scadenza entro 7 giorni</h2>' +
+      '<table><tr><th>Prodotto</th><th>Origine</th><th>Scadenza</th></tr>' + (rows || "<tr><td colspan=3>Nessuna scadenza imminente</td></tr>") + '</table></div>' +
+      '<div class="toolbar"><button class="btn" onclick="go(\'nuovoArrivo\')">+ Nuovo arrivo</button>' +
+      '<button class="btn sec" onclick="go(\'nuovaProduzione\')">+ Nuova produzione</button></div>';
+  }},
+
+  arrivi: { label: "📥 Arrivi", render: () => {
+    // Applica in cascata i filtri attivi: testo libero, fornitore, ingrediente, finestra scadenza
+    const f = filtriArrivi;
+    let list = ingressi.slice();
+    if (f.testo) list = list.filter(a => (P(a.prod).nome + " " + a.lotto + " " + F(a.forn).nome + " " + (MARCA[a.prod]||"")).toLowerCase().includes(f.testo));
+    if (f.forn) list = list.filter(a => a.forn == f.forn);
+    if (f.prod) list = list.filter(a => a.prod == f.prod);
+    if (f.fin !== "all") list = list.filter(a => { const n = daysTo(a.scad); return f.fin === "scad" ? n < 0 : n <= Number(f.fin); });
+    const rows = list.map(a => '<tr class="click" onclick="go(\'dettaglio\',\'i\',' + a.id + ')">' +
+      '<td><b>' + P(a.prod).nome + '</b></td><td>' + (brandOf(a) ? '<span class="badge b-gray">🏷 ' + brandOf(a) + '</span>' : "—") + '</td><td class="mono">' + a.lotto + '</td><td>' + F(a.forn).nome + '</td>' +
+      '<td>' + a.arrivo + '</td><td>' + scadBadge(a.scad) + '</td><td>' + a.qta + ' ' + P(a.prod).um + '</td>' +
+      '<td style="text-align:right">' + eur(a.pu) + '</td><td style="text-align:right">' + eur(tot(a)) + '</td>' +
+      '<td style="text-align:right"><span class="badge b-gray">' + a.iva + '%</span></td><td style="text-align:right"><b>' + eur(totIva(a)) + '</b></td>' +
+      '<td>' + allBadge(a) + '</td></tr>').join("");
+    // La barra filtri mostra i valori correnti (value/selected) così sopravvivono al re-render
+    return '<h1>Registro arrivi</h1><p class="sub">Lotti in ingresso dai fornitori</p>' +
+      '<div class="toolbar" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
+      '<input id="fTesto" placeholder="Cerca prodotto, marca, lotto, fornitore..." style="min-width:200px" value="' + f.testo + '" oninput="setF(\'testo\', this.value)">' +
+      '<select onchange="setF(\'forn\', this.value)">' +
+      '<option value="0">Tutti i fornitori</option>' + fornitori.map(x=>'<option value="' + x.id + '"' + (f.forn==x.id?" selected":"") + '>' + x.nome + '</option>').join("") + '</select>' +
+      '<select onchange="setF(\'prod\', this.value)">' +
+      '<option value="0">Tutti gli ingredienti</option>' + prodotti.filter(p=>p.tipo==="ingrediente").map(x=>'<option value="' + x.id + '"' + (f.prod==x.id?" selected":"") + '>' + x.nome + '</option>').join("") + '</select>' +
+      '<select onchange="setF(\'fin\', this.value)">' +
+      '<option value="all"' + (f.fin==="all"?" selected":"") + '>Qualsiasi scadenza</option>' +
+      '<option value="3"' + (f.fin==="3"?" selected":"") + '>In scadenza ≤ 3 giorni</option>' +
+      '<option value="7"' + (f.fin==="7"?" selected":"") + '>In scadenza ≤ 7 giorni</option>' +
+      '<option value="scad"' + (f.fin==="scad"?" selected":"") + '>Scaduti</option></select>' +
+      '<span style="color:var(--muted);font-size:12px;margin-left:auto">' + list.length + ' di ' + ingressi.length + ' arrivi</span>' +
+      '<button class="btn" onclick="go(\'nuovoArrivo\')">+ Nuovo arrivo</button></div>' +
+      '<div class="card"><table><tr><th>Prodotto</th><th>Marca</th><th>Lotto</th><th>Fornitore</th><th>Arrivo</th><th>Scadenza</th><th>Q.tà</th><th style="text-align:right">Prezzo unit.</th><th style="text-align:right">Totale</th><th style="text-align:right">IVA</th><th style="text-align:right">Totale + IVA</th><th>Documenti</th></tr>' + (rows || "<tr><td colspan=12 style='color:var(--muted)'>Nessun arrivo corrisponde ai filtri</td></tr>") + '</table></div>';
+  }},
+
+  produzioni: { label: "🥣 Produzioni", render: () => {
+    // Filtro testuale su nome prodotto o codice lotto interno
+    const t = filtriProd.testo.toLowerCase();
+    const list = interni.filter(a => !t || (P(a.prod).nome + " " + a.lotto).toLowerCase().includes(t));
+    const rows = list.map(a => '<tr class="click" onclick="go(\'dettaglio\',\'n\',' + a.id + ')">' +
+      '<td><b>' + P(a.prod).nome + '</b> <span class="badge b-amber">' + (a.fam || "?") + '</span>' +
+      (a.modificata ? ' <span class="badge b-amber" title="' + (a.noteMod || "Ricetta variata per questa produzione") + '">✏️ ricetta variata</span>' : '') + '</td>' +
+      '<td class="mono">' + a.lotto + '</td><td>' + a.prodData + '</td>' +
+      '<td>' + scadBadge(a.scad) + '</td><td>' + consumi.filter(c=>c.interno===a.id).length + ' lotti usati</td></tr>').join("");
+    return '<h1>Produzioni interne</h1><p class="sub">Lotti generati in negozio · la famiglia mostrata è quella registrata dalla singola produzione · <span class="badge b-amber">✏️ ricetta variata</span> = fuori standard</p>' +
+      '<div class="toolbar"><input id="fProd" placeholder="Cerca prodotto o lotto interno..." style="min-width:240px" value="' + filtriProd.testo + '" oninput="setFP(this.value)">' +
+      '<button class="btn" onclick="go(\'nuovaProduzione\')">+ Nuova produzione</button></div>' +
+      '<div class="card"><table><tr><th>Prodotto</th><th>Lotto interno</th><th>Data produzione</th><th>Scadenza</th><th>Consumi</th></tr>' + (rows || "<tr><td colspan=5 style='color:var(--muted)'>Nessuna produzione corrisponde</td></tr>") + '</table></div>';
+  }},
+
+  scadenze: { label: "📅 Scadenze", render: () => {
+    // Due sezioni con ricerca indipendente: ingredienti (ingressi) e prodotti (interni)
+    const ti = filtriScad.ing.toLowerCase(), tp = filtriScad.pro.toLowerCase();
+    const row = a => '<tr class="click" onclick="go(\'dettaglio\',\'' + (a.isIn ? "i" : "n") + '\',' + a.id + ')">' +
+      '<td><b>' + P(a.prod).nome + '</b><br><span class="mono">' + a.lotto + '</span></td>' +
+      '<td>' + (a.isIn && brandOf(a) ? '<span class="badge b-gray">🏷 ' + brandOf(a) + '</span>' : "—") + '</td>' +
+      '<td>' + (a.isIn ? "arrivo · " + F(a.forn).nome : "produzione interna") + '</td>' +
+      '<td>' + scadBadge(a.scad) + '</td></tr>';
+    const ing = [...ingressi.map(a=>({...a, isIn:true}))]
+      .filter(a => !ti || (P(a.prod).nome + " " + a.lotto + " " + F(a.forn).nome + " " + (MARCA[a.prod]||"")).toLowerCase().includes(ti))
+      .sort((a,b)=>a.scad.localeCompare(b.scad)).map(row).join("");
+    const pro = [...interni.map(a=>({...a, isIn:false}))]
+      .filter(a => !tp || (P(a.prod).nome + " " + a.lotto).toLowerCase().includes(tp))
+      .sort((a,b)=>a.scad.localeCompare(b.scad)).map(row).join("");
+    const head = '<tr><th>Prodotto / lotto</th><th>Marca</th><th>Origine</th><th>Scadenza</th></tr>';
+    return '<h1>Scadenze</h1><p class="sub">Tutti i lotti ordinati per urgenza, ingredienti e prodotti separati</p>' +
+      '<div class="card"><h2>🛒 Ingredienti in scadenza</h2>' +
+      '<input id="fScadI" placeholder="Cerca ingrediente, marca, lotto, fornitore..." style="width:100%;margin-bottom:10px" value="' + filtriScad.ing + '" oninput="setFS(\'ing\',this.value)">' +
+      '<table>' + head + (ing || "<tr><td colspan=4>Nessun ingrediente corrisponde</td></tr>") + '</table></div>' +
+      '<div class="card"><h2>🥣 Prodotti in scadenza</h2>' +
+      '<input id="fScadP" placeholder="Cerca prodotto o lotto interno..." style="width:100%;margin-bottom:10px" value="' + filtriScad.pro + '" oninput="setFS(\'pro\',this.value)">' +
+      '<table>' + head + (pro || "<tr><td colspan=4>Nessun prodotto corrisponde</td></tr>") + '</table></div>';
+  }},
+
+  anagrafiche: { label: "📇 Anagrafiche", render: () => {
+    // Tre card (ingredienti, prodotti, fornitori) ciascuna con ricerca propria.
+    // Ogni riga è cliccabile e apre la scheda di modifica corrispondente.
+    const tf = filtriAnag.for.toLowerCase();
+    const fr = fornitori.filter(f=>!tf || f.nome.toLowerCase().includes(tf))
+      .map(f=>'<tr class="click" onclick="go(\'anagrafica\',\'f\',' + f.id + ')"><td><b>' + f.nome + '</b></td><td><span class="badge b-gray">' + ingressi.filter(i=>i.forn===f.id).length + ' arrivi</span></td></tr>').join("");
+    const ti = filtriAnag.ing.toLowerCase(), tp = filtriAnag.pro.toLowerCase();
+    // La ricerca nell'elenco ingredienti copre nome E marca/produttore
+    const ing = prodotti.filter(p=>p.tipo==="ingrediente" && (!ti || p.nome.toLowerCase().includes(ti) || (MARCA[p.id]||"").toLowerCase().includes(ti)))
+      .map(p=>{ const al = allergeniDi(p.id);
+        return '<tr class="click" onclick="go(\'anagrafica\',\'p\',' + p.id + ')"><td><b>' + p.nome + '</b></td><td>' + (MARCA[p.id] || "—") + '</td><td>' + consBadge(CONS[p.id]) + '</td><td>' +
+        (al.length ? al.slice(0,2).map(allergBadge).join("") + (al.length>2 ? '<span class="badge b-red" title="' + al.slice(2).map(i=>ALL[i][0]).join(", ") + '">+' + (al.length-2) + '</span>' : "") : '<span style="color:var(--muted)">—</span>') +
+        '</td><td>' + p.um + '</td><td class="mono">' + p.sigla + '</td><td><span class="badge b-gray">' + ingressi.filter(i=>i.prod===p.id).length + ' arrivi</span></td></tr>'; }).join("");
+    const pr = prodotti.filter(p=>p.tipo!=="ingrediente" && (!filtriAnag.fam || PFAM[p.id] === filtriAnag.fam) && (!tp || p.nome.toLowerCase().includes(tp)))
+      .map(p=>{ const al = allergeniDi(p.id);
+        return '<tr class="click" onclick="go(\'anagrafica\',\'p\',' + p.id + ')"><td><b>' + p.nome + '</b></td><td>' + famBadge(p) + '</td><td>' +
+        (al.length ? al.slice(0,2).map(allergBadge).join("") + (al.length>2 ? '<span class="badge b-red" title="' + al.slice(2).map(i=>ALL[i][0]).join(", ") + '">+' + (al.length-2) + '</span>' : "") : '<span style="color:var(--muted)">—</span>') +
+        '</td><td>' + p.um + '</td><td class="mono">' + p.sigla + '</td></tr>'; }).join("");
+    const empty = c => "<tr><td colspan=" + c + " style='color:var(--muted)'>Nessun risultato corrisponde</td></tr>";
+    // Ogni tabella è avvolta in .scroll-list; nelle anagrafiche il tetto è
+    // alzato a 520px: la card resta compatta e la lista si scorre internamente
+    // (rotella del mouse dentro la tabella), con intestazioni bloccate in alto.
+    const wrap = html => '<div class="scroll-list" style="max-height:520px">' + html + '</div>';
+    // Versione compatta per liste corte (fornitori, famiglie): tetto più basso
+    const wrapC = html => '<div class="scroll-list" style="max-height:320px">' + html + '</div>';
+    return '<h1>Anagrafiche</h1><p class="sub">Fornitori, ingredienti acquistati e prodotti lavorati in negozio</p>' +
+      // Le quattro card sono impilate IN VERTICALE (una sopra l'altra, colonna
+      // unica): le tabelle occupano tutta la larghezza disponibile e ogni
+      // lista scorre al proprio interno, così le intestazioni non ballano.
+      '<div class="detail-grid" style="grid-template-columns:1fr;align-items:start">' +
+      '<div class="card"><div class="card-head"><h2>🛒 Ingredienti <span class="badge b-gray">' + prodotti.filter(p=>p.tipo==="ingrediente").length + '</span></h2>' +
+      '<button class="btn sec" style="padding:5px 10px;font-size:12px">+ Nuovo</button></div>' +
+      '<input id="fAnagI" placeholder="Cerca ingrediente..." style="width:100%;margin-bottom:10px" value="' + filtriAnag.ing + '" oninput="setFA(\'ing\',this.value)">' +
+      wrap('<table><tr><th>Nome</th><th>Marca / Produttore</th><th>Conservazione</th><th>Allergeni</th><th>U.m.</th><th>Sigla</th><th>Arrivi</th></tr>' + (ing || empty(7)) + '</table>') + '</div>' +
+      '<div class="card"><div class="card-head"><h2>🥣 Prodotti <span class="badge b-gray">' + prodotti.filter(p=>p.tipo!=="ingrediente").length + '</span></h2>' +
+      '<button class="btn sec" style="padding:5px 10px;font-size:12px">+ Nuovo</button></div>' +
+      (filtriAnag.fam ? '<div style="margin-bottom:8px"><span class="badge b-amber" style="cursor:pointer" title="Clic: toglie il filtro famiglia" onclick="setFamFilt(null)">🏷 ' + filtriAnag.fam + ' ✕</span></div>' : "") +
+      '<input id="fAnagP" placeholder="Cerca prodotto' + (filtriAnag.fam ? " (solo " + filtriAnag.fam + ')...' : "...") + '" style="width:100%;margin-bottom:10px" value="' + filtriAnag.pro + '" oninput="setFA(\'pro\',this.value)">' +
+      wrap('<table><tr><th>Nome</th><th>Famiglia</th><th>Allergeni (da ricetta)</th><th>U.m.</th><th>Sigla</th></tr>' + (pr || empty(5)) + '</table>') + '</div>' +
+      '<div class="card"><div class="card-head"><h2>🚚 Fornitori <span class="badge b-gray">' + fornitori.length + '</span></h2>' +
+      '<button class="btn sec" style="padding:5px 10px;font-size:12px">+ Nuovo</button></div>' +
+      '<input id="fAnagF" placeholder="Cerca fornitore..." style="width:100%;margin-bottom:10px" value="' + filtriAnag.for + '" oninput="setFA(\'for\',this.value)">' +
+      wrapC('<table><tr><th>Nome</th><th>Arrivi</th></tr>' + (fr || empty(2)) + '</table>') + '</div>' +
+      // Quarta card: le FAMIGLIE dei prodotti di laboratorio, gestibili qui
+      // Card FAMIGLIE: stesso comportamento delle altre tre (pulsante
+      // + Nuovo in testata, casella di ricerca, lista filtrabile, altezza
+      // fissa come i Fornitori e scroll interno).
+      '<div class="card"><div class="card-head"><h2>🏷 Famiglie <span class="badge b-gray">' + famiglie.length + '</span></h2>' +
+      '<button class="btn sec" style="padding:5px 10px;font-size:12px" onclick="togFamNew()">+ Nuovo</button></div>' +
+      (famMsg ? '<div class="hint" style="background:var(--red-bg);border-color:#fecaca;color:var(--red);margin-bottom:10px">' + famMsg + '</div>' : "") +
+      '<input id="fAnagFam" placeholder="Cerca famiglia..." style="width:100%;margin-bottom:10px" value="' + filtriAnag.famT + '" oninput="setFA(\'famT\',this.value)">' +
+      '<div class="scroll-list" style="height:342px;overflow-y:auto">' +
+      (famNewOpen ? '<div class="check-row" style="border:none;padding:6px 0;align-items:center;background:var(--amber-bg)">' +
+        '<input id="famNew" placeholder="Nome della nuova famiglia..." style="flex:1" value="' + famNew + '" oninput="setFamNew(this.value)">' +
+        '<button class="btn" style="padding:5px 10px;font-size:12px" onclick="addFam()">+ Aggiungi</button>' +
+        '<button class="btn sec" style="padding:5px 10px;font-size:12px" onclick="togFamNew()">Annulla</button></div>' : "") +
+      famiglie.map((f, i) => ({ f, i }))
+        .filter(x => !filtriAnag.famT || x.f.toLowerCase().includes(filtriAnag.famT.toLowerCase()))
+        .map(({ f, i }) => {
+        const nProd = prodotti.filter(p => PFAM[p.id] === f).length;
+        return famEdit === i
+          ? '<div class="check-row" style="border:none;padding:6px 0"><input id="famEdit" value="' + f + '" style="flex:1" oninput="famEditVal=this.value">' +
+            '<button class="btn" style="padding:5px 10px;font-size:12px" onclick="saveFam(' + i + ', document.getElementById(\'famEdit\').value)">Salva</button>' +
+            '<button class="btn sec" style="padding:5px 10px;font-size:12px" onclick="setFamEdit(null)">Annulla</button></div>'
+          : '<div class="check-row" style="border:none;padding:6px 0;align-items:center">' +
+            '<span class="click" onclick="setFamEdit(' + i + ')" style="flex:1"><b>' + f + '</b> <span style="color:var(--muted);font-size:11px">✏️</span></span>' +
+            '<span class="badge b-gray" style="cursor:pointer" data-f="' + f + '" title="Clic: mostra i prodotti di questa famiglia" onclick="event.stopPropagation();setFamFilt(this.dataset.f)">' + nProd + (nProd === 1 ? " prodotto" : " prodotti") + '</span>' +
+            '<button class="btn sec" style="padding:2px 6px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="delFam(' + i + ')" title="Elimina famiglia (solo se non usata)">✕</button></div>';
+      }).join("") +
+      '</div>' +
+      '<div class="hint" style="margin:10px 0 0">Le famiglie si usano in ricette e produzioni. Rinominare qui aggiorna ovunque; eliminare è possibile solo se nessun prodotto la usa.</div></div>' +
+      '</div>';
+  }},
+
+  // Scheda di modifica di un'anagrafica: kind 'p' = prodotto/ingrediente, 'f' = fornitore
+  anagrafica: { label: null, render: (_, kind, id) => {
+    const back = () => 'go(\'anagrafiche\')';
+    if (kind === "f") {
+      // ---- Scheda fornitore: dati fiscali e contatti ----
+      const f = fornitori.find(x=>x.id==id);
+      if (!f) return "<p>Fornitore non trovato</p>";
+      return '<span class="back" onclick="' + back() + '">← Torna alle anagrafiche</span>' +
+        '<h1>' + f.nome + '</h1><p class="sub">Scheda fornitore</p>' +
+        '<div class="card"><div class="form-grid">' +
+        '<div><label>Ragione sociale <span class="req">*</span></label><input value="' + f.nome + '"></div>' +
+        '<div><label>Partita IVA</label><input value="' + f.piva + '" class="mono"></div>' +
+        '<div><label>Telefono</label><input value="' + f.tel + '"></div>' +
+        '<div><label>Email</label><input value="' + f.email + '"></div>' +
+        '<div class="full"><label>Note</label><input value="' + f.note + '"></div>' +
+        '</div></div>' +
+        '<div class="card"><h2>Arrivi recenti da questo fornitore</h2><table>' +
+        '<tr><th>Prodotto</th><th>Lotto</th><th>Arrivo</th><th>Scadenza</th><th style="text-align:right">Totale + IVA</th></tr>' +
+        ingressi.filter(i=>i.forn===f.id).map(a=>'<tr class="click" onclick="go(\'dettaglio\',\'i\',' + a.id + ')"><td><b>' + P(a.prod).nome + '</b></td><td class="mono">' + a.lotto + '</td><td>' + a.arrivo + '</td><td>' + scadBadge(a.scad) + '</td><td style="text-align:right"><b>' + eur(totIva(a)) + '</b></td></tr>').join("") +
+        '</table></div>' +
+        '<button class="btn" onclick="' + back() + '">Salva modifiche</button> ' +
+        '<button class="btn sec" onclick="' + back() + '">Annulla</button>';
+    }
+    // ---- Scheda prodotto/ingrediente ----
+    const p = prodotti.find(x=>x.id==id);
+    if (!p) return "<p>Prodotto non trovato</p>";
+    const isIngr = p.tipo === "ingrediente";
+    return '<span class="back" onclick="' + back() + '">← Torna alle anagrafiche</span>' +
+      '<h1>' + p.nome + ' ' + (isIngr ? '<span class="badge b-gray tag-type">ingrediente</span>' : famBadge(p)) + '</h1>' +
+      '<p class="sub">Scheda ' + (isIngr ? "ingrediente" : "prodotto") + '</p>' +
+      '<div class="card"><div class="form-grid">' +
+      '<div><label>Nome <span class="req">*</span></label><input value="' + p.nome + '"></div>' +
+      (isIngr
+        ? '<div><label>Denominazione legale <span class="req">*</span></label><input value="' + denomOf(p) + '" title="La dicitura esatta dell\'etichetta d\'acquisto: finisce nell\'etichetta dei prodotti finiti"><div class="hint" style="margin-top:6px">Precompilata dal nome: è la dicitura dell\'etichetta d\'acquisto (es. farina 00 → «Farina di grano tenero tipo 00»).</div></div>'
+        : "") +
+      '<div><label>Marca / Produttore' + (isIngr ? ' <span class="req">*</span>' : '') + '</label><input value="' + (isIngr ? (MARCA[p.id] || "") : "") + '" placeholder="' + (isIngr ? "es. Molino Chiari" : "in produzione interna") + '"' + (isIngr ? "" : " disabled") + '></div>' +
+      (!isIngr ? '<div><label>Famiglia <span class="req">*</span></label>' + renderFamSel("an" + p.id, PFAM[p.id]) + '</div>' : "") +
+      (isIngr
+        ? '<div class="full"><label>Allergeni <span style="font-weight:400;color:var(--muted)">(clic per attivare/disattivare)</span></label><div style="display:flex;flex-wrap:wrap;gap:4px">' +
+          ALL.map((a, i) => {
+            const on = (ALLERG[p.id] || []).includes(i);
+            return '<span class="badge ' + (on ? "b-red" : "b-gray") + '" style="cursor:pointer" title="' + a[1] + '" onclick="togAllerg(' + p.id + ',' + i + ')">' + (on ? "⚠ " : "") + a[0] + '</span>';
+          }).join("") + '</div>' +
+          '<div class="hint" style="margin-top:8px">I 14 allergeni obbligatori da etichetta (Reg. UE 1169/2011). I prodotti di laboratorio li ereditano automaticamente dalla ricetta.</div></div>'
+        : '<div class="full"><label>Allergeni (ereditati dalla ricetta)</label><div style="display:flex;flex-wrap:wrap;gap:4px">' +
+          (allergeniDi(p.id).length ? allergeniDi(p.id).map(allergBadge).join("") : '<span style="color:var(--muted)">nessun allergene dalla ricetta attuale</span>') +
+          '</div><div class="hint" style="margin-top:8px">Calcolati dagli ingredienti della ricetta: se cambia la ricetta, cambiano qui. Non si editano a mano.</div></div>') +
+      (isIngr
+        ? '<div><label>Conservazione <span class="req">*</span></label><select style="width:100%">' + CONS_LIST.map(c=>'<option' + (c === CONS[p.id] ? " selected" : "") + '>' + (CONS_ICON[c] || "") + " " + c + '</option>').join("") + '</select></div>'
+        : "") +
+      '<div><label>Unità di misura</label><input value="' + p.um + '"></div>' +
+      '<div><label>Sigla (per codice lotto interno)</label><input value="' + p.sigla + '" class="mono"></div>' +
+      '<div class="full"><label>Note</label><input value="' + p.note + '"></div>' +
+      '</div></div>' +
+      (isIngr
+        ? '<div class="card"><h2>Arrivi recenti di questo ingrediente</h2>' +
+          '<div class="scroll-list"><table>' +
+          '<tr><th>Lotto</th><th>Fornitore</th><th>Arrivo</th><th>Scadenza</th><th>Q.tà</th><th style="text-align:right">Prezzo unit.</th><th style="text-align:right">Totale</th><th style="text-align:right">IVA</th><th style="text-align:right">Totale + IVA</th><th>Documenti</th></tr>' +
+          (ingressi.filter(i=>i.prod===p.id).map(a=>'<tr class="click" onclick="go(\'dettaglio\',\'i\',' + a.id + ')"><td class="mono">' + a.lotto + '</td><td>' + F(a.forn).nome + '</td><td>' + a.arrivo + '</td><td>' + scadBadge(a.scad) + '</td><td>' + a.qta + ' ' + p.um + '</td><td style="text-align:right">' + eur(a.pu) + '</td><td style="text-align:right">' + eur(tot(a)) + '</td><td style="text-align:right"><span class="badge b-gray">' + a.iva + '%</span></td><td style="text-align:right"><b>' + eur(totIva(a)) + '</b></td><td>' + allBadge(a) + '</td></tr>').join("") || '<tr><td colspan=10 style="color:var(--muted)">Nessun arrivo registrato</td></tr>') +
+          '</table></div></div>'
+        : '<div class="card"><h2>Produzioni recenti di questo prodotto</h2><table>' +
+          '<tr><th>Lotto interno</th><th>Data produzione</th><th>Scadenza</th></tr>' +
+          interni.filter(i=>i.prod===p.id).map(a=>'<tr class="click" onclick="go(\'dettaglio\',\'n\',' + a.id + ')"><td class="mono">' + a.lotto + '</td><td>' + a.prodData + '</td><td>' + scadBadge(a.scad) + '</td></tr>').join("") +
+          '</table></div>') +
+      '<button class="btn" onclick="' + back() + '">Salva modifiche</button> ' +
+      '<button class="btn sec" onclick="' + back() + '">Annulla</button>';
+  }},
+
+  // Vista Magazzino: giacenze, ritmo di consumo e previsione dei rifornimenti.
+  // Tutti i valori sono CALCOLATI dai dati già registrati (arrivi + consumi),
+  // non inseriti a mano: è il vantaggio di avere la tracciabilità.
+  // Vista Ricette: l'elenco delle composizioni dei prodotti interni.
+  // Selezionando un prodotto in produzione l'app usa la ricetta per
+  // proporre automaticamente i lotti da consumare (tracciabilità automatica).
+  ricette: { label: "👩‍🍳 Ricette", render: () => {
+    const t = filtriRic.testo.toLowerCase();
+    const list = ricette.filter(r => !t || P(r.prod).nome.toLowerCase().includes(t));
+    const rows = list.map(r => { const cu = costoUnita(r.prod);
+      return '<tr class="click" onclick="go(\'ricetta\',' + r.id + ')">' +
+      '<td><b>' + P(r.prod).nome + '</b></td><td>' + r.resa + '</td><td>' + r.righe.length + ' ingredienti</td>' +
+      '<td style="text-align:right"><b>' + (cu !== null ? eur(cu) + '/' + P(r.prod).um : "—") + '</b></td>' +
+      '<td><span class="badge b-amber">' + r.fam + '</span></td></tr>'; }).join("");
+    return '<h1>Ricette</h1><p class="sub">Composizione e food cost dei prodotti: rendono automatica la selezione dei lotti in produzione</p>' +
+      '<div class="toolbar"><input id="fRic" placeholder="Cerca ricetta..." style="min-width:240px" value="' + filtriRic.testo + '" oninput="setFR(this.value)">' +
+      '<button class="btn" onclick="go(\'nuovaRicetta\')">+ Nuova ricetta</button></div>' +
+      '<div class="card"><table><tr><th>Prodotto</th><th>Resa per dose</th><th>Ingredienti</th><th style="text-align:right">Food cost/ud</th><th>Famiglia</th></tr>' +
+      (rows || "<tr><td colspan=4 style='color:var(--muted)'>Nessuna ricetta corrisponde</td></tr>") + '</table></div>' +
+      '<div class="hint">Prodotti senza ricetta: ' + prodotti.filter(p=>p.tipo!=="ingrediente" && !R(p.id)).map(p=>p.nome).join(", ") + '</div>';
+  }},
+
+  // Scheda ricetta: composizione completa, cliccabile sulle anagrafiche.
+  // CALCOLATORE DI RESA: si inserisce la resa desiderata e tutte le
+  // quantità degli ingredienti scalano proporzionalmente (fattore = resa/resaN).
+  ricetta: { label: null, render: (_, id) => {
+    const r = ricette.find(x=>x.id==id);
+    if (!r) return "<p>Ricetta non trovata</p>";
+    // Resa desiderata: se vuota o non valida, si usa la dose base (fattore 1)
+    const target = parseFloat((resaTarget[id] || "").replace(",", "."));
+    const fattore = (!isNaN(target) && target > 0) ? target / r.resaN : 1;
+    const attiva = fattore !== 1;
+    const fmt = q => (q * fattore).toFixed(fattore === 1 ? 1 : 2).replace(".", ",");
+    const rows = r.righe.map(l => {
+      const cu = costoUnita(l.p); // costo per unità dell'ingrediente (ricorsivo per semilavorati)
+      const costoRiga = cu !== null ? cu * l.q * fattore : null;
+      return '<tr class="click" onclick="go(\'anagrafica\',\'p\',' + l.p + ')">' +
+      '<td><b>' + P(l.p).nome + '</b>' +
+      (P(l.p).tipo !== "ingrediente" ? ' ' + famBadge(P(l.p)) : '') +
+      '</td><td style="text-align:right">' + fmt(l.q) + ' ' + P(l.p).um + '</td>' +
+      '<td style="text-align:right">' + (cu !== null ? eur(cu / (fattore === 1 ? 1 : 1)) + '/' + P(l.p).um : "—") + '</td>' +
+      '<td style="text-align:right"><b>' + (costoRiga !== null ? eur(costoRiga) : "—") + '</b></td></tr>';
+    }).join("");
+    // Totale food cost della dose (attuale o riscalata) e per unità di prodotto
+    const totDose = r.righe.reduce((s,l) => { const cu = costoUnita(l.p); return cu !== null ? s + cu * l.q * fattore : s; }, 0);
+    const resaAttuale = r.resaN * fattore;
+    return '<span class="back" onclick="go(\'ricette\')">← Torna alle ricette</span>' +
+      '<h1>' + P(r.prod).nome + '</h1><p class="sub">Ricetta · <span class="badge b-amber">' + r.fam + '</span> · resa base: <b>' + r.resa + '</b></p>' +
+      '<div class="card"><h2>🧮 Calcolatore resa</h2>' +
+      '<div class="toolbar" style="margin-bottom:0">' +
+      '<label style="margin:0">Resa desiderata</label>' +
+      '<input id="fResa" placeholder="' + r.resaN + '" style="width:100px" value="' + (resaTarget[id] || "") + '" oninput="setResa(' + id + ', this.value)"> ' + r.resaUm +
+      '<span class="badge ' + (attiva ? 'b-amber' : 'b-gray') + '">' +
+      (attiva ? 'dose × ' + fattore.toFixed(2).replace(".", ",") : 'dose base') + '</span>' +
+      (attiva ? '<button class="btn sec" style="padding:5px 10px;font-size:12px" onclick="setResa(' + id + ', \'\')">↺ Ripristina dose base</button>' : '') +
+      '</div>' +
+      (attiva ? '<div class="hint" style="margin:12px 0 0">Quantità aggiornate per una resa di <b>' + (resaTarget[id] || target) + ' ' + r.resaUm + '</b></div>' : '') +
+      '</div>' +
+      '<div class="detail-grid" style="margin-top:16px">' +
+      '<div class="card"><h2>🧾 Composizione e food cost</h2>' +
+      '<div class="scroll-list"><table><tr><th>Ingrediente</th><th style="text-align:right">Quantità' + (attiva ? ' (ricalcolata)' : '') + '</th><th style="text-align:right">Costo/u.m.</th><th style="text-align:right">Costo riga</th></tr>' + rows + '</table></div>' +
+      '<div class="hint" style="margin:12px 0 0">Le righe in ambra sono semilavorati: il loro costo/u.m. è a sua volta calcolato dalla loro ricetta (catena ricorsiva).</div></div>' +
+      '<div class="card"><h2>💰 Food cost</h2>' +
+      '<div class="kv"><div class="k">Costo totale della dose' + (attiva ? ' (ricalcolato)' : '') + '</div><div class="v">' + eur(totDose) + '</div></div>' +
+      '<div class="kv"><div class="k">Costo per ' + r.resaUm + ' di prodotto</div><div class="v">' + eur(totDose / resaAttuale) + '</div></div>' +
+      '<div class="kv"><div class="k">Esempio: prezzo di vendita a food cost 30%</div><div class="v">' + eur(totDose / resaAttuale / 0.3) + ' / ' + r.resaUm + '</div></div>' +
+      '<div class="hint" style="margin:12px 0 0">Semplice indicatore: il costo degli ingredienti. Non include manodopera, energia e sprechi.</div>' +
+      '<button class="btn sec" style="margin-top:12px;width:100%" onclick="go(\'analisiFC\',' + r.id + ')">📈 Analisi food cost nel tempo</button></div>' +
+      '<div class="card"><h2>⚙️ Parametri</h2>' +
+      '<div class="kv"><div class="k">Prodotto ottenuto</div><div class="v">' + P(r.prod).nome + '</div></div>' +
+      '<div class="kv"><div class="k">Famiglia</div><div class="v"><span class="badge b-amber">' + r.fam + '</span></div></div>' +
+      '<div class="kv"><div class="k">Resa per dose</div><div class="v">' + (attiva ? resaTarget[id] + ' ' + r.resaUm : r.resa) + '</div></div>' +
+      '<div class="kv"><div class="k">Scadenza consigliata</div><div class="v">da definire in v0.2 (shelf-life per prodotto)</div></div>' +
+      '<button class="btn sec" style="margin-top:10px"' + (attiva ? ' disabled title="Disponibile in v0.2: produzione con dose riscalata"' : ' onclick="go(\'nuovaProduzione\')"') + '>🥣 Avvia produzione con questa ricetta</button>' +
+      ' <button class="btn sec" style="margin-top:10px" onclick="go(\'modificaRicetta\',' + r.id + ')">✏️ Modifica ricetta</button>' +
+      '</div></div>' +
+      (r.note ? '<div class="card" style="margin-top:16px"><h2>📝 Note e procedimento</h2><div style="white-space:pre-wrap;line-height:1.6">' + r.note + '</div></div>' : '') +
+      '</div>';
+  }},
+
+  // Scheda di modifica ricetta: si può cambiare resa e unità di misura,
+  // correggere le quantità, sostituire o togliere ingredienti.
+  // Nuova ricetta: come la modifica ma vuota. Il prodotto ottenuto si sceglie
+  // col combobox (che offre "crea nuovo" se non esiste ancora in anagrafica),
+  // le righe si aggiungono una a una e ognuna ha la sua ✕.
+  nuovaRicetta: { label: null, render: () => {
+    const righe = nrRows.map((r, i) =>
+      '<div class="check-row" style="align-items:center">' +
+      '<div style="flex:1">' + renderCombo("nr-r" + i, "Cerca ingrediente o semilavorato...", "riga", { sel: r.prod, onPick: "pickNr", onQuery: "queryNr" }) + '</div>' +
+      '<input placeholder="0" style="width:80px;text-align:right" title="quantità">' +
+      '<span style="color:var(--muted);font-size:12px;min-width:20px">' + (r.prod ? P(r.prod).um : "") + '</span>' +
+      '<button class="btn sec" style="padding:4px 8px;font-size:12px;color:var(--red);border-color:var(--red)" onclick="remNrRow(' + i + ')" title="Rimuovi riga">✕</button>' +
+      '</div>').join("");
+    return '<span class="back" onclick="go(\'ricette\')">← Torna alle ricette</span>' +
+      '<h1>Nuova ricetta</h1><p class="sub">Definisce la composizione di un prodotto: la userà il food cost e la selezione automatica dei lotti in produzione</p>' +
+      '<div class="card"><div class="form-grid">' +
+      '<div><label>Prodotto ottenuto <span class="req">*</span></label>' + renderCombo("nr-prod", "Cerca prodotto (o creane uno nuovo)...", "lavorati") + '</div>' +
+      '<div><label>Famiglia <span class="req">*</span></label>' + renderFamSel("nrf", "Creme") + '</div>' +
+      '<div><label>Resa base <span class="req">*</span></label><div style="display:flex;gap:8px">' +
+      '<input placeholder="es. 1,2" style="width:100px">' +
+      renderUmResa(null) + '</div></div>' +
+      '</div></div>' +
+      '<div class="card"><div class="card-head"><h2>🧾 Righe della ricetta</h2>' +
+      '<button class="btn sec" style="padding:5px 10px;font-size:12px" onclick="addNrRow()">+ Aggiungi ingrediente</button></div>' +
+      righe +
+      '<div class="hint" style="margin:12px 0 0">Le dosi sono espresse per resa completa: il calcolatore le riscalerà su richiesta. L\'u.m. di ogni riga è quella dell\'ingrediente scelto.</div>' +
+      '</div>' +
+      // Il procedimento sta in fondo, come ultima cosa prima del salvataggio:
+      // è un testo lungo e qui ha tutto lo spazio che serve (textarea, non input).
+      '<div class="card"><div class="card-head"><h2>📝 Note e procedimento</h2></div>' +
+      '<textarea id="nr-note" rows="6" style="width:100%;resize:vertical;font-family:inherit" placeholder="Procedimento, tempistiche, accorgimenti... es.&#10;1. Montare gli albumi a neve&#10;2. Incorporare lo zucchero a pioggia..."></textarea>' +
+      '</div>' +
+      '<button class="btn" onclick="go(\'ricette\')">Salva ricetta</button> ' +
+      '<button class="btn sec" onclick="go(\'ricette\')">Annulla</button>';
+  }},
+
+  modificaRicetta: { label: null, render: (_, id) => {
+    const r = ricette.find(x=>x.id==id);
+    if (!r) return "<p>Ricetta non trovata</p>";
+    // Ogni riga: combobox ingrediente/semilavorato + quantità + pulsante rimuovi.
+    // Il combobox cerca per nome o sigla e raggruppa per categoria: regge
+    // anche centinaia di voci senza scroll infiniti.
+    const righe = r.righe.map((l, i) =>
+      '<div class="check-row" style="align-items:center">' +
+      renderCombo("mr-r" + i, "Cerca ingrediente o semilavorato...", "riga", { sel: l.p }) +
+      '<input value="' + l.q + '" style="width:80px;text-align:right" title="quantità">' +
+      '<span style="color:var(--muted);font-size:12px">' + P(l.p).um + '</span>' +
+      '<button class="btn sec" style="padding:4px 8px;font-size:12px;color:var(--red);border-color:var(--red)" title="Rimuovi riga">✕</button>' +
+      '</div>').join("") + mrRows.map((x, i) =>
+      '<div class="check-row" style="align-items:center">' +
+      '<div style="flex:1">' + renderCombo("mr-x" + i, "Cerca ingrediente o semilavorato...", "riga", { sel: x.prod, onPick: "pickMr", onQuery: "queryMr" }) + '</div>' +
+      '<input placeholder="0" style="width:80px;text-align:right" title="quantità">' +
+      '<span style="color:var(--muted);font-size:12px;min-width:20px">' + (x.prod ? P(x.prod).um : "") + '</span>' +
+      '<button class="btn sec" style="padding:4px 8px;font-size:12px;color:var(--red);border-color:var(--red)" onclick="remMrRow(' + i + ')" title="Rimuovi riga">✕</button>' +
+      '</div>').join("");
+    return '<span class="back" onclick="go(\'ricetta\',' + r.id + ')">← Torna alla ricetta</span>' +
+      '<h1>Modifica ricetta</h1><p class="sub">' + P(r.prod).nome + '</p>' +
+      '<div class="hint">Le dosi sono espresse per resa completa: cambiando la resa base, il calcolatore e le produzioni future useranno la nuova base.</div>' +
+      '<div class="card"><div class="form-grid">' +
+      '<div><label>Prodotto ottenuto <span class="req">*</span></label>' + renderCombo("mr-prod", "Cerca prodotto...", "lavorati", { sel: r.prod }) + '</div>' +
+      '<div><label>Famiglia <span class="req">*</span></label>' + renderFamSel("mrf", r.fam) + '</div>' +
+      '<div><label>Resa base <span class="req">*</span></label><div style="display:flex;gap:8px">' +
+      '<input id="fResaBase" value="' + r.resaN + '" style="width:100px">' +
+      renderUmResa(r.resaUm) + '</div></div>' +
+      '</div></div>' +
+      '<div class="card"><div class="card-head"><h2>🧾 Righe della ricetta</h2>' +
+      '<button class="btn sec" style="padding:5px 10px;font-size:12px" onclick="addMrRow()">+ Aggiungi ingrediente</button></div>' +
+      righe +
+      '<div class="hint" style="margin:12px 0 0">L\'unità di misura di ogni riga è quella dell\'ingrediente scelto: cambiando ingrediente, cambia anche l\'u.m. della riga.</div>' +
+      '</div>' +
+      // Procedimento in fondo, come nella creazione: testo lungo, spazio largo
+      '<div class="card"><div class="card-head"><h2>📝 Note e procedimento</h2></div>' +
+      '<textarea id="mr-note" rows="6" style="width:100%;resize:vertical;font-family:inherit">' + r.note + '</textarea>' +
+      '</div>' +
+      '<button class="btn" onclick="go(\'ricetta\',' + r.id + ')">Salva ricetta</button> ' +
+      '<button class="btn sec" onclick="go(\'ricetta\',' + r.id + ')">Annulla</button>';
+  }},
+
+  magazzino: { label: "📦 Magazzino", render: () => {
+    const t = filtriMag.testo.toLowerCase();
+    // Statistiche per ogni ingrediente acquistato
+    const stats = prodotti.filter(p=>p.tipo==="ingrediente").map(p => {
+      const arrivi = ingressi.filter(a=>a.prod===p.id);
+      // Giacenza attuale: somma delle quantità residue dei lotti non scaduti
+      const stock = arrivi.filter(a=>daysTo(a.scad)>=0).reduce((s,a)=>s+a.res,0);
+      // Consumo totale dal primo arrivo a oggi (pesca i consumi dei lotti di questo prodotto)
+      const consumato = arrivi.reduce((s,a)=>s + consumi.filter(c=>c.orig==="ingresso"&&c.from===a.id).reduce((x,c)=>x+c.qta,0),0);
+      // Consumo medio giornaliero: dividendo per i giorni trascorsi dal primo arrivo
+      const giorni = Math.max(1, daysTo("2026-11-12") - daysTo(arrivi[0] ? arrivi[0].arrivo : "2026-11-12"));
+      const perGiorno = consumato / giorni;
+      // Copertura: quanti giorni di lavoro copre la giacenza attuale
+      const copertura = perGiorno > 0 ? stock / perGiorno : Infinity;
+      // Intervallo medio tra i rifornimenti osservati (per suggerire quando riordinare)
+      const date = arrivi.map(a=>a.arrivo).sort();
+      const intervalli = date.slice(1).map((d,i)=>Math.abs(new Date(d)-new Date(date[i]))/86400000);
+      const intervallo = intervalli.length ? Math.round(intervalli.reduce((s,x)=>s+x,0)/intervalli.length) : null;
+      const ultimo = date[date.length-1];
+      const prossimo = intervallo ? new Date(new Date(ultimo).getTime() + intervallo*86400000).toISOString().slice(0,10) : null;
+      // Giacenze PER MARCA: stesso ingrediente può avere più marche in casa
+      // (es. farina Molino Chiari + Molino Biolatti). Le righe figlie nel
+      // magazzino mostrano questa divisione.
+      const perMarca = {};
+      arrivi.filter(a=>daysTo(a.scad)>=0).forEach(a => {
+        const m = brandOf(a) || "—";
+        perMarca[m] = perMarca[m] || { stock: 0, lotti: 0 };
+        perMarca[m].stock += a.res; perMarca[m].lotti++;
+      });
+      return { p, stock, perGiorno, copertura, intervallo, ultimo, prossimo, nArrivi: arrivi.length, perMarca };
+    });
+    const copBadge = c => c < 3 ? '<span class="badge b-red">critico · ' + (c===Infinity?"∞":Math.round(c)) + 'g</span>'
+      : c < 7 ? '<span class="badge b-amber">' + Math.round(c) + 'g</span>'
+      : '<span class="badge b-green">' + Math.round(c) + 'g</span>';
+    // Riga aggregata per ingrediente +, se ci sono più marche, una riga figlia
+    // per marca (indentata, muta): la giacenza si divide per marca.
+    const rows = stats.filter(s=>!t || s.p.nome.toLowerCase().includes(t)).filter(s=>!filtriMag.cons || CONS[s.p.id] === filtriMag.cons).map(s =>
+      '<tr><td><b>' + s.p.nome + '</b> ' + consBadge(CONS[s.p.id]) + '</td><td><b>' + s.stock + '</b> ' + s.p.um + '</td>' +
+      '<td>' + (s.perGiorno ? s.perGiorno.toFixed(1) + ' ' + s.p.um + '/g' : "—") + '</td>' +
+      '<td>' + (s.perGiorno ? copBadge(s.copertura) : '<span class="badge b-gray">no dati</span>') + '</td>' +
+      '<td>' + s.nArrivi + '</td>' +
+      '<td>' + (s.intervallo ? '≈ ogni ' + s.intervallo + 'g' : "—") + '</td>' +
+      '<td>' + s.ultimo + '</td>' +
+      '<td>' + (s.prossimo ? (s.prossimo <= "2026-11-12" ? '<span class="badge b-amber">atteso: ' + s.prossimo + '</span>' : s.prossimo) : "—") + '</td></tr>' +
+      (Object.keys(s.perMarca).length > 1
+        ? Object.entries(s.perMarca).map(([m, d]) =>
+            '<tr style="color:var(--muted)"><td style="padding-left:22px">└ 🏷 ' + m + '</td><td>' + d.stock + ' ' + s.p.um + '</td><td colspan="6">' + d.lotti + (d.lotti === 1 ? " lotto" : " lotti") + '</td></tr>').join("")
+        : "")).join("");
+    return '<h1>Magazzino</h1><p class="sub">Giacenze e ritmo di consumo calcolati dagli arrivi e dalle produzioni registrate · gli ingredienti con più marche si dividono in righe figlie 🏷</p>' +
+      '<div class="toolbar"><input id="fMag" placeholder="Cerca ingrediente..." style="min-width:240px" value="' + filtriMag.testo + '" oninput="setFM(this.value)">' +
+      // Chip di conservazione: dividono il magazzino per luogo fisico
+      CONS_LIST.map(c => '<button class="btn' + (filtriMag.cons === c ? "" : " sec") + '" style="padding:6px 12px;font-size:12px" onclick="setConsFM(\'' + c + '\')">' + CONS_ICON[c] + " " + c + ' <span class="badge b-gray">' + ingressi.filter(a=>CONS[a.prod]===c).length + '</span></button>').join("") +
+      (filtriMag.cons ? '<button class="btn sec" style="padding:6px 12px;font-size:12px;color:var(--red);border-color:var(--red)" onclick="setConsFM(null)">✕ ' + filtriMag.cons + '</button>' : "") +
+      '<button class="btn sec">📄 Esporta elenco (.xlsx)</button></div>' +
+      '<div class="card"><h2>⚠️ Da ordinare</h2>' +
+      '<table><tr><th>Ingrediente</th><th>Giacenza</th><th>Copertura</th></tr>' +
+      stats.filter(s=>s.perGiorno>0 && s.copertura<5 && (!filtriMag.cons || CONS[s.p.id]===filtriMag.cons)).map(s=>'<tr class="click" onclick="go(\'arrivi\')"><td><b>' + s.p.nome + '</b></td><td>' + s.stock + ' ' + s.p.um + '</td><td>' + copBadge(s.copertura) + '</td></tr>').join("") +
+      '</table></div>' +
+      '<div class="card"><h2>📦 Giacenze e rifornimenti</h2>' +
+      '<table><tr><th>Ingrediente</th><th>Giacenza</th><th>Consumo medio</th><th>Copertura</th><th>Arrivi</th><th>Cadenza rifornimenti</th><th>Ultimo arrivo</th><th>Prossimo atteso</th></tr>' +
+      (rows || "<tr><td colspan=8 style='color:var(--muted)'>Nessun ingrediente corrisponde</td></tr>") + '</table></div>';
+  }},
+
+  // Scheda di modifica di un arrivo esistente: stesso form del nuovo arrivo,
+  // ma precompilato con i dati del lotto. Da qui si corregge qualsiasi campo.
+  modificaArrivo: { label: null, render: (_, id) => {
+    const a = ingressi.find(x=>x.id==id);
+    if (!a) return "<p>Arrivo non trovato</p>";
+    const opt = (list, sel) => list.map(x=>'<option' + (x===sel ? " selected" : "") + '>' + x + '</option>').join("");
+    return '<span class="back" onclick="go(\'dettaglio\',\'i\',' + a.id + ')">← Torna al dettaglio del lotto</span>' +
+      '<h1>Modifica arrivo</h1><p class="sub">' + P(a.prod).nome + ' · lotto <span class="mono">' + a.lotto + '</span></p>' +
+      '<div class="hint">Se il documento del fornitore riporta dati diversi, si correggono qui: la tracciabilità esistente resta intatta.</div>' +
+      '<div class="card"><div class="form-grid">' +
+      '<div><label>Ingrediente <span class="req">*</span></label>' + renderCombo("ma-ing", "Cerca per nome o sigla...", "ingrediente", { sel: a.prod }) + '</div>' +
+      '<div><label>Marca / Produttore del lotto <span class="req">*</span></label><input value="' + (brandOf(a) || "") + '" title="La marca è del singolo arrivo: il default viene dall\'anagrafica"></div>' +
+      '<div><label>Fornitore <span class="req">*</span></label>' + renderCombo("ma-for", "Cerca fornitore...", "fornitore", { sel: a.forn }) + '</div>' +
+      '<div><label>Codice lotto esterno <span class="req">*</span></label><input value="' + a.lotto + '" class="mono"></div>' +
+      '<div><label>Quantità</label><input value="' + a.qta + ' ' + P(a.prod).um + '"></div>' +
+      '<div><label>Data arrivo <span class="req">*</span></label><input type="date" value="' + a.arrivo + '"></div>' +
+      '<div><label>Data scadenza <span class="req">*</span></label><input type="date" value="' + a.scad + '"></div>' +
+      '<div><label>Prezzo unitario <span class="opt">(€ / ' + P(a.prod).um + ')</span></label><input value="' + String(a.pu).replace(".", ",") + '"></div>' +
+      '<div><label>IVA <span class="opt">(%)</span></label><select style="width:100%">' + opt(["4","10","22"], String(a.iva)) + '</select></div>' +
+      '<div class="full"><div class="hint" style="margin-bottom:0">Totale aggiornato automaticamente: <b>' + eur(tot(a)) + ' + IVA ' + a.iva + '% = ' + eur(totIva(a)) + '</b></div></div>' +
+      '<div class="full"><label>Documenti <span class="opt">(opzionali)</span></label>' +
+      (a.allegati.length ? a.allegati.map(x=>'<div class="badge b-green" style="margin-right:6px;cursor:pointer" title="Clic: apre il documento" onclick="apriDoc(' + a.id + ')">📄 ' + x + '</div>').join("") + ' ' : "") +
+      '<button class="btn sec" style="margin-top:6px" title="Apre la finestra di Windows per cercare e confermare il file: viene salvato il percorso" onclick="docMsg = \'📎 Selezione file... (nel backend: finestra di Windows, si conferma e si salva la path)\'; render()">📎 Aggiungi allegato</button>' +
+      '<input placeholder="Riferimento cartaceo (es. faldone 2026, pag. 12)" style="margin-left:8px;width:50%" value="' + (a.cartaceo || "") + '"></div>' +
+      '</div></div>' +
+      '<button class="btn" onclick="go(\'dettaglio\',\'i\',' + a.id + ')">Salva modifiche</button> ' +
+      '<button class="btn sec" onclick="go(\'dettaglio\',\'i\',' + a.id + ')">Annulla</button> ' +
+      '<button class="btn sec" style="color:var(--red);border-color:var(--red)" onclick="delArrivo(' + a.id + ')">🗑️ Elimina arrivo</button>';
+  }},
+
+  // Analisi food cost di una ricetta: pagina aperta dalla scheda ricetta.
+  // Due grafici SVG disegnati dal codice (nessuna libreria):
+  // 1) linea: andamento del costo unitario nel tempo (dallo storico prezzi)
+  // 2) torta: peso di ogni ingrediente sul costo attuale
+  analisiFC: { label: null, render: (_, id) => {
+    const r = ricette.find(x=>x.id==id);
+    if (!r) return "<p>Ricetta non trovata</p>";
+    const p = P(r.prod);
+    // ---- 1) serie temporale: per ogni data nello storico degli ingredienti,
+    // il costo unitario del prodotto ricalcolato con i prezzi di quel giorno
+    const date = [...new Set(r.righe.flatMap(l => (STORICO[l.p] || []).map(x => x[0])))].sort();
+    if (date.length) date.push("2026-11-12"); // oggi
+    const serie = date.map(d => ({ d, v: costoUnitaAt(r.prod, d) }));
+    const vs = serie.map(s=>s.v), vmin = Math.min(...vs), vmax = Math.max(...vs);
+    const W = 560, H = 220, PAD = 36;
+    const x = i => PAD + (i / Math.max(1, serie.length - 1)) * (W - 2*PAD);
+    const y = v => H - PAD - ((v - vmin) / Math.max(0.01, vmax - vmin)) * (H - 2*PAD - 10);
+    const pts = serie.map((s,i) => x(i).toFixed(1) + "," + y(s.v).toFixed(1)).join(" ");
+    const dots = serie.map((s,i) => '<circle cx="' + x(i).toFixed(1) + '" cy="' + y(s.v).toFixed(1) + '" r="3.5" fill="var(--brand)"><title>' + s.d + ': ' + eur(s.v) + '/' + p.um + '</title></circle>').join("");
+    // ---- 2) torta: incidenza attuale di ogni riga sul costo totale
+    const PAL = ["#0e7490","#d97706","#16a34a","#9333ea","#dc2626","#0891b2","#ca8a04","#7c3aed"];
+    const valori = r.righe.map(l => ({ nome: P(l.p).nome, v: l.q * (costoUnita(l.p) || 0), um: P(l.p).um }));
+    const totPie = valori.reduce((s,x) => s + x.v, 0) || 1;
+    let ang0 = -Math.PI/2;
+    const arcs = valori.map((x, i) => {
+      const frac = x.v / totPie, ang1 = ang0 + frac * 2*Math.PI;
+      const cx=90, cy=90, RR=70;
+      // Fetta piena: centro → arco esterno → chiusura (Z).
+      // Se una voce è al 100% l'arco degenere: si disegna un cerchio pieno.
+      let path;
+      if (frac >= 0.999) {
+        path = '<circle cx="' + cx + '" cy="' + cy + '" r="' + RR + '" fill="' + PAL[i % PAL.length] + '" opacity="0.85"><title>' + x.nome + ': ' + (frac*100).toFixed(1).replace(".", ",") + '%</title></circle>';
+      } else {
+        const x0 = cx + RR*Math.cos(ang0), y0 = cy + RR*Math.sin(ang0);
+        const x1 = cx + RR*Math.cos(ang1), y1 = cy + RR*Math.sin(ang1);
+        const large = frac > 0.5 ? 1 : 0;
+        path = '<path d="M ' + cx + ' ' + cy + ' L ' + x0.toFixed(1) + ' ' + y0.toFixed(1) + ' A ' + RR + ' ' + RR + ' 0 ' + large + ' 1 ' + x1.toFixed(1) + ' ' + y1.toFixed(1) + ' Z" fill="' + PAL[i % PAL.length] + '" opacity="0.85"><title>' + x.nome + ': ' + (frac*100).toFixed(1).replace(".", ",") + '%</title></path>';
+      }
+      ang0 = ang1;
+      return { path, leg: '<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + PAL[i % PAL.length] + ';margin-right:6px"></span>' + x.nome + '</td><td style="text-align:right">' + eur(x.v) + '</td><td style="text-align:right"><b>' + (frac*100).toFixed(1).replace(".", ",") + '%</b></td></tr>' };
+    });
+    const variazione = serie.length > 1 ? ((serie[serie.length-1].v - serie[0].v) / serie[0].v * 100) : 0;
+    return '<span class="back" onclick="go(\'ricetta\',' + r.id + ')">← Torna alla ricetta</span>' +
+      '<h1>Analisi food cost · ' + p.nome + '</h1>' +
+      '<p class="sub">Costo attuale: <b>' + eur(costoUnita(r.prod)) + '/' + p.um + '</b> · variazione dall\'inizio dello storico: <b style="color:' + (variazione > 0 ? "var(--red)" : "var(--green)") + '">' + (variazione > 0 ? "+" : "") + variazione.toFixed(1).replace(".", ",") + '%</b></p>' +
+      '<div class="detail-grid">' +
+      '<div class="card"><h2>📈 Andamento costo unitario nel tempo</h2>' +
+      (serie.length > 1
+        ? '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%">' +
+          '<line x1="' + PAD + '" y1="' + (H-PAD) + '" x2="' + (W-PAD) + '" y2="' + (H-PAD) + '" stroke="var(--line)"/>' +
+          '<text x="' + PAD + '" y="' + (y(vmax)-6) + '" font-size="10" fill="var(--muted)">' + eur(vmax) + '</text>' +
+          '<text x="' + PAD + '" y="' + (y(vmin)+14) + '" font-size="10" fill="var(--muted)">' + eur(vmin) + '</text>' +
+          '<polyline points="' + pts + '" fill="none" stroke="var(--brand)" stroke-width="2.5"/>' + dots +
+          '<text x="' + PAD + '" y="' + (H-8) + '" font-size="10" fill="var(--muted)">' + serie[0].d + '</text>' +
+          '<text x="' + (W-PAD-70) + '" y="' + (H-8) + '" font-size="10" fill="var(--muted)">' + serie[serie.length-1].d + '</text>' +
+          '</svg>'
+        : '<p style="color:var(--muted)">Servono almeno due registrazioni di prezzo per tracciare l\'andamento.</p>') +
+      '<div class="hint" style="margin:12px 0 0">Ogni punto ricalcola il costo con i prezzi degli ingredienti a quella data (passando il mouse vedi data e valore). Lo storico nasce dagli arrivi registrati.</div></div>' +
+      '<div class="card"><h2>🥧 Incidenza ingredienti sul costo</h2>' +
+      '<div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">' +
+      '<svg viewBox="0 0 180 180" style="width:180px;flex-shrink:0"><circle cx="90" cy="90" r="70" fill="#f1f5f9"/>' + arcs.map(a=>a.path).join("") + '</svg>' +
+      '<div style="flex:1;min-width:220px"><table><tr><th>Ingrediente</th><th style="text-align:right">Costo</th><th style="text-align:right">%</th></tr>' + arcs.map(a=>a.leg).join("") + '</table></div>' +
+      '</div></div>' +
+      '</div>';
+  }},
+
+  impostazioni: { label: "⚙️ Impostazioni", render: () => {
+    return '<h1>Impostazioni</h1><p class="sub">v0.1 prototipo</p>' +
+      '<div class="card"><h2>Cartella dati</h2>' +
+      '<div class="hint">Database e allegati risiedono in <b>Documenti/GestioneLotti</b>. Il backup copia tutto in un unico archivio.</div>' +
+      '<button class="btn">💾 Backup adesso (.zip con data)</button></div>' +
+      '<div class="card"><h2>Versione</h2><p>Registro Lotti v0.1 · prototipo UI · dati di esempio</p></div>';
+  }},
+
+  nuovoArrivo: { label: null, render: () => {
+    // Form arrivo: la scelta del prodotto è limitata agli ingredienti
+    return '<span class="back" onclick="go(\'arrivi\')">← Torna al registro arrivi</span>' +
+      '<h1>Nuovo arrivo</h1><p class="sub">Registra un lotto in ingresso</p>' +
+      '<div class="card"><div class="form-grid">' +
+      '<div><label>Ingrediente <span class="req">*</span></label>' + renderCombo("arr-ing", "Cerca per nome o sigla (es. lat, UOV)...", "ingrediente") +
+      ((comboState["arr-ing"]||{}).sel && CONS[comboState["arr-ing"].sel] ? '<div class="hint" style="margin-top:6px">' + consBadge(CONS[comboState["arr-ing"].sel]) + ' conservazione abituale di questo ingrediente</div>' : "") + '</div>' +
+      '<div><label>Marca / Produttore del lotto <span class="req">*</span></label><input value="' + (((comboState["arr-ing"]||{}).sel && MARCA[comboState["arr-ing"].sel]) || "") + '" placeholder="Prefissata dall\'anagrafica: correggibile per questo arrivo" title="La marca può cambiare da arrivo ad arrivo: quella dell\'anagrafica è solo il default"><div class="hint" style="margin-top:6px">La marca è del <b>lotto che arriva</b>: se il fornitore cambia prodotto, si corregge solo qui.</div></div>' +
+      '<div><label>Fornitore <span class="req">*</span></label>' + renderCombo("arr-for", "Cerca fornitore...", "fornitore") + '</div>' +
+      '<div><label>Codice lotto esterno <span class="req">*</span></label><input placeholder="es. IT12A45X"></div>' +
+      '<div><label>Quantità</label><input placeholder="es. 5 kg"></div>' +
+      '<div><label>Data arrivo <span class="req">*</span></label><input type="date" value="2026-11-12"></div>' +
+      '<div><label>Data scadenza <span class="req">*</span></label><input type="date"></div>' +
+      '<div><label>Prezzo unitario <span class="opt">(€ per ' + 'unità)</span></label><input placeholder="es. 3,20"></div>' +
+      '<div><label>IVA <span class="opt">(%)</span></label><select style="width:100%"><option>4</option><option selected>10</option><option>22</option></select></div>' +
+      '<div class="full"><div class="hint" style="margin-bottom:0">Totale e totale con IVA calcolati automaticamente dalla quantità e dal prezzo: <b>16,00 € + IVA → 16,64 €</b></div></div>' +
+      '<div class="full"><label>Documenti <span class="opt">(opzionali)</span></label>' +
+      '<button class="btn sec" title="Apre la finestra di Windows per cercare e confermare il file: viene salvato il percorso" onclick="docMsg = \'📎 Selezione file... (nel backend: finestra di Windows, si conferma e si salva la path)\'; render()">📎 Allega DDT / certificato / foto</button>' +
+      '<span style="color:var(--muted);margin-left:10px">oppure</span>' +
+      '<input placeholder="Riferimento cartaceo (es. faldone 2026, pag. 12)" style="margin-top:8px;width:60%"></div>' +
+      '</div></div>' +
+      '<button class="btn" onclick="go(\'arrivi\')">Salva arrivo</button>';
+  }},
+
+  nuovaProduzione: { label: null, render: () => {
+    // FLUSSO GUIDATO DALLA RICETTA: selezionato il prodotto (default: crema
+    // pasticcera, che ha ricetta), l'app mostra le righe della ricetta e per
+    // ogni riga propone i lotti disponibili di quell'ingrediente, già spuntati
+    // se è l'unico lotto. L'utente al massimo corregge, non sceglie da zero.
+    const prodSel = 4; // prodotto selezionato nella demo (crema pasticcera)
+    const ric = R(prodSel);
+    // Per ogni riga di ricetta: FEFO assegna da solo i lotti (partendo da quello
+    // che scade prima); "✏️ cambia lotti" apre la modalità manuale con typeahead.
+    // Le quantità richieste restano modificabili inline (solo per questa produzione).
+    const righeRicetta = ric ? ric.righe.map((l, ix) => {
+      return '<div style="border-bottom:1px solid var(--line);padding:10px 0;margin-bottom:8px">' +
+        '<div class="check-row" style="border:none;padding:0;margin-bottom:6px;justify-content:flex-start">' +
+        '<input value="' + l.q + '" style="width:70px;text-align:right" title="Quantità: modificabile solo per questa produzione">' +
+        '<b>' + P(l.p).nome + '</b>' +
+        '<span class="badge b-gray">' + P(l.p).um + '</span>' +
+        '<span style="color:var(--muted);font-size:11px">da ricetta: ' + l.q + '</span>' +
+        (P(l.p).tipo !== "ingrediente" ? ' ' + famBadge(P(l.p)) : '') +
+        '<button class="btn sec" style="padding:3px 7px;font-size:11px;color:var(--red);border-color:var(--red);margin-left:auto" title="Escludi questa riga solo per questa produzione">✕</button>' +
+        '</div>' + renderLotti(l.p, l.q, "r" + ix) + '</div>';
+    }).join("") : "";
+    // Righe AGGIUNTE per questa produzione (fuori ricetta): "aggiunte" con il
+    // pulsante "+ Aggiungi ingrediente". Come le variazioni, valgono solo qui.
+    // Lo stato 'agg' (in fondo allo script) tiene l'ingrediente scelto per ogni
+    // riga: alla selezione compaiono i lotti disponibili da spuntare.
+    const giaInRicetta = ric ? ric.righe.map(l=>l.p) : [];
+    const righeAggiunte = agg.map((r, i) => {
+      return '<div style="border:1px dashed var(--amber);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--amber-bg)">' +
+        '<div class="check-row" style="border:none;padding:0;margin-bottom:6px;justify-content:flex-start">' +
+        '<div style="flex:1">' + renderCombo("agg" + i, "— scegli ingrediente —", "ingrediente", { sel: r.prod, onPick: "pickAgg", onQuery: "queryAgg" }) + '</div>' +
+        '<input value="0,5" style="width:70px;text-align:right" title="Quantità">' +
+        '<span class="badge b-amber">aggiunta</span>' +
+        '<button class="btn sec" style="padding:3px 7px;font-size:11px;color:var(--red);border-color:var(--red)" onclick="remAgg(' + i + ')" title="Rimuovi aggiunta">✕</button>' +
+        '</div>' +
+        (r.prod ? renderLotti(r.prod, 0.5, "a" + i) : "<p style='color:var(--muted);font-size:12px;margin:0'>Seleziona un ingrediente: l'assegnazione FEFO dei lotti comparirà qui.</p>") + '</div>';
+    }).join("");
+    return '<span class="back" onclick="go(\'produzioni\')">← Torna alle produzioni</span>' +
+      '<h1>Nuova produzione interna</h1><p class="sub">Crea un lotto interno: la ricetta propone già i lotti da consumare</p>' +
+      '<div class="steps"><span class="step on">1. Prodotto</span><span class="step on">2. Lotti usati</span><span class="step">3. Conferma</span></div>' +
+      '<div class="detail-grid">' +
+      '<div class="card"><h2>Prodotto in produzione</h2>' +
+      '<label>Prodotto <span class="req">*</span></label>' +
+      renderCombo("np-prod", "Cerca prodotto (nome o sigla)...", "lavorati", { sel: prodSel }) +
+      // FAMIGLIA: proposta dalla ricetta (master) ma modificabile SOLO per
+      // questa produzione: è la regola "ricetta master, produzione slave".
+      // La produzione registra la sua famiglia; la ricetta resta intatta.
+      '<div style="margin-top:12px"><label>Famiglia di questa produzione</label>' +
+      renderFamSel("npf", ric ? ric.fam : "Creme") +
+      (ric ? '<div class="hint" style="margin:8px 0 0">Proposta dalla ricetta (' + ric.fam + '): cambiarla vale <b>solo per questa produzione</b>, la ricetta master non viene toccata.</div>' : '') +
+      '</div>' +
+      (ric
+        ? '<div class="hint" style="margin-top:12px">👩‍🍳 Ricetta <b>' + P(ric.prod).nome + '</b> caricata automaticamente · resa: ' + ric.resa + ' · ' + ric.righe.length + ' ingredienti</div>' +
+          '<div class="hint" style="margin-top:8px;background:var(--amber-bg);border-color:#fcd34d;color:var(--amber)">✏️ Le quantità a destra sono modificabili: le variazioni valgono <b>solo per questa produzione</b> e la ricetta salvata resta invariata.</div>'
+        : '<div class="hint" style="margin-top:12px">⚠ Nessuna ricetta per questo prodotto: i lotti vanno selezionati a mano</div>') +
+      '<div class="form-grid" style="margin-top:4px">' +
+      '<div><label>Data produzione</label><input type="date" value="2026-11-12"></div>' +
+      '<div><label>Scadenza <span class="req">*</span></label><input type="date"></div></div></div>' +
+      '<div class="card"><div class="card-head" style="margin-bottom:0"><h2>Lotti consumati</h2>' +
+      '<button class="btn sec" style="padding:5px 10px;font-size:12px" onclick="addRiga()">+ Aggiungi ingrediente</button></div>' +
+      '<div style="color:var(--muted);font-size:11px;margin-bottom:10px">secondo ricetta · le modifiche valgono solo per questa produzione</div>' +
+      '<div class="scroll-list" style="padding:10px">' + righeRicetta + righeAggiunte + '</div></div>' +
+      '</div>' +
+      '<div style="margin-top:8px"><button class="btn" onclick="go(\'produzioni\')">✓ Conferma produzione</button></div>';
+  }},
+
+  // Dettaglio lotto: kind 'i' = ingresso, 'n' = interno. Mostra la tracciabilità nei due sensi.
+  dettaglio: { label: null, render: (_, kind, id) => {
+    const isIn = kind === "i";
+    const lotto = isIn ? ingressi.find(x=>x.id==id) : interni.find(x=>x.id==id);
+    if (!lotto) return "<p>Lotto non trovato</p>";
+    // "Usato in": lotti interni che consumano questo lotto (tramite la tabella consumi)
+    const usatoIn = consumi.filter(c=>c.orig===(isIn?"ingresso":"interno") && c.from==id)
+      .map(c => interni.find(n=>n.id===c.interno));
+    // "Deriva da": solo per i lotti interni, i lotti che hanno consumato
+    const derivaDa = isIn ? [] : consumi.filter(c=>c.interno==id);
+    const back = isIn ? "arrivi" : "produzioni";
+    const derivaHtml = isIn
+      ? "<p style='color:var(--muted);font-size:13px'>Lotto in ingresso: origine diretta dal fornitore.</p>"
+      : derivaDa.map(c => { const src = c.orig==="ingresso" ? ingressi.find(x=>x.id===c.from) : interni.find(x=>x.id===c.from);
+          return '<div class="check-row click" onclick="go(\'dettaglio\',\'' + (c.orig==="ingresso" ? "i" : "n") + '\',' + c.from + ')">→ <b>' + P(src.prod).nome + '</b> · <span class="mono">' + src.lotto + '</span> <span style="color:var(--muted)">(' + c.qta + ')</span></div>';
+        }).join("") || "<p style='color:var(--muted)'>nessuna origine</p>";
+    const usatoHtml = usatoIn.map(n => '<div class="check-row click" onclick="go(\'dettaglio\',\'n\',' + n.id + ')">→ <b>' + P(n.prod).nome + '</b> · <span class="mono">' + n.lotto + '</span></div>').join("") || "<p style='color:var(--muted)'>non ancora utilizzato</p>";
+    const docHtml = isIn
+      ? (lotto.allegati.length
+          ? lotto.allegati.map(a=>'<div class="badge b-green" style="cursor:pointer" title="Clic: apre il documento" onclick="apriDoc(' + lotto.id + ')">📄 ' + a + '</div>').join(" ")
+          : (lotto.cartaceo ? '<span class="badge b-gray">' + lotto.cartaceo + '</span>' : "<span style='color:var(--muted)'>nessuno</span>"))
+      : "<span style='color:var(--muted)'>nessuno</span>";
+    return '<span class="back" onclick="go(\'' + back + '\')">← Indietro</span>' +
+      '<h1>' + P(lotto.prod).nome +
+      ((!isIn && lotto.modificata) ? ' <span class="badge b-amber" title="' + (lotto.noteMod || "Ricetta variata per questa produzione") + '">✏️ ricetta variata</span>' : '') +
+      ' <span class="mono" style="color:var(--muted);font-weight:400">' + lotto.lotto + '</span></h1>' +
+      '<div class="detail-grid">' +
+      '<div class="card"><h2>Dati del lotto</h2>' +
+      '<div class="kv"><div class="k">Prodotto</div><div class="v">' + P(lotto.prod).nome + (isIn && brandOf(lotto) ? ' <span class="badge b-gray">🏷 ' + brandOf(lotto) + '</span>' : '') + '</div></div>' +
+      '<div class="kv"><div class="k">Allergeni</div><div class="v">' + (allergeniDi(lotto.prod).length ? allergeniDi(lotto.prod).map(allergBadge).join("") : '<span style="color:var(--muted)">nessuno dichiarato</span>') + '</div></div>' +
+      '<div class="kv"><div class="k">' + (isIn ? "Fornitore" : "Data produzione") + '</div><div class="v">' + (isIn ? F(lotto.forn).nome : lotto.prodData) + '</div></div>' +
+      (!isIn && lotto.fam
+        ? '<div class="kv"><div class="k">Famiglia di questa produzione</div><div class="v"><span class="badge b-amber">' + lotto.fam + '</span>' +
+          (R(lotto.prod) && R(lotto.prod).fam !== lotto.fam ? ' <span class="badge b-amber" title="La produzione ha registrato una famiglia diversa da quella della ricetta master">✏️ diversa dalla ricetta</span>' : "") +
+          '</div></div>'
+        : "") +
+      '<div class="kv"><div class="k">' + (isIn ? "Data arrivo" : "Tipo") + '</div><div class="v">' + (isIn ? lotto.arrivo : P(lotto.prod).tipo) + '</div></div>' +
+      '<div class="kv"><div class="k">Scadenza</div><div class="v">' + scadBadge(lotto.scad) + '</div></div>' +
+      (isIn
+        ? '<div class="kv"><div class="k">Prezzo unitario</div><div class="v">' + eur(lotto.pu) + ' / ' + P(lotto.prod).um + '</div></div>' +
+          '<div class="kv"><div class="k">Totale / con IVA</div><div class="v">' + eur(tot(lotto)) + ' + IVA ' + lotto.iva + '% = <b>' + eur(totIva(lotto)) + '</b></div></div>'
+        : '') +
+      '<div class="kv"><div class="k">Documenti</div><div class="v">' + docHtml + '</div></div>' +
+      '<button class="btn sec" style="margin-top:10px">🥣 Nuova produzione usando questo lotto</button>' +
+      (isIn ? ' <button class="btn sec" style="margin-top:10px" onclick="go(\'modificaArrivo\',' + lotto.id + ')">✏️ Modifica arrivo</button>' +
+        ' <button class="btn sec" style="margin-top:10px;color:var(--red);border-color:var(--red)" onclick="delArrivo(' + lotto.id + ')" title="Elimina l\'arrivo dal registro">🗑️ Elimina</button>' : '') + '</div>' +
+      (delMsg ? '<div class="hint" style="background:var(--red-bg);border-color:#fecaca;color:var(--red)">' + delMsg + '</div>' : '') +
+      '<div class="card"><h2>🔗 Tracciabilità</h2>' +
+      '<h2 style="margin-top:0">Deriva da</h2>' + derivaHtml +
+      '<h2>Usato in</h2>' + usatoHtml + '</div></div>' +
+      // ETICHETTA CALCOLATA (solo produzioni): denominazioni + allergeni in
+      // un'unica funzione, ordinati per quantità decrescente. Nessun dato
+      // inserito a mano: è la lettura del verbale (i consumi) per ricorsione.
+      (!isIn
+        ? '<div class="card" style="margin-top:16px"><h2>🏷 Etichetta ingredienti (calcolata dal verbale)</h2>' +
+          etichettaHtml(lotto.id) +
+          '<div class="hint" style="margin-top:12px">Calcolata dai consumi di questa produzione, per ricorsione sui lotti interni: crema e altri semilavorati vengono "aperti" e i loro ingredienti si fondono con quelli diretti (le uova non compaiono mai due volte). Se cambia la registrazione dei consumi, cambia l\'etichetta.</div></div>'
+        : "");
+  }},
+};
+
+/* ============================================================
+   STATO DI NAVIGAZIONE E FILTRI
+   ============================================================ */
+
+// Vista corrente + parametri extra (es. tipo e id per 'dettaglio')
+let current = "dashboard", params = [];
+// Stato dei filtri: sopravvive al cambio pagina finché non si torna alla vista
+const filtriArrivi = { testo: "", forn: 0, prod: 0, fin: "all" };
+const filtriScad = { ing: "", pro: "" };
+const filtriProd = { testo: "" };
+const filtriAnag = { ing: "", pro: "", for: "", fam: null, famT: "" };
+// Filtro famiglia sulla card Prodotti: attivato cliccando il conteggio
+// nella card Famiglie; il chip "🏷 famiglia ✕" lo toglie
+function setFamFilt(f) { filtriAnag.fam = f; render(); }
+const filtriMag = { testo: "", cons: null };
+// Filtro conservazione: chip rapidi frigo/freezer/magazzino
+function setConsFM(v) { filtriMag.cons = filtriMag.cons === v ? null : v; render(); }
+const filtriRic = { testo: "" };
+
+// Dopo un re-render l'HTML è ricostruito da zero: questa funzione
+// rimette il focus sulla barra di ricerca con il cursore a fine testo,
+// così l'utente può continuare a digitare senza accorgersene.
+function keepFocus(id) { const t = document.getElementById(id); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); } }
+
+// Setter dei filtri: ogni modifica aggiorna lo stato e rirenderizza la vista
+function setF(k, v) { filtriArrivi[k] = v; render(); keepFocus("fTesto"); }
+function setFS(k, v) { filtriScad[k] = v; render(); keepFocus(k === "ing" ? "fScadI" : "fScadP"); }
+function setFP(v) { filtriProd.testo = v; render(); keepFocus("fProd"); }
+function setFA(k, v) { filtriAnag[k] = v; render(); keepFocus(k === "ing" ? "fAnagI" : k === "pro" ? "fAnagP" : k === "famT" ? "fAnagFam" : "fAnagF"); }
+function setFM(v) { filtriMag.testo = v; render(); keepFocus("fMag"); }
+function setFR(v) { filtriRic.testo = v; render(); keepFocus("fRic"); }
+// Aggiorna la resa desiderata della ricetta aperta e ricalcola le quantità
+function setResa(id, v) { resaTarget[id] = v; render(); keepFocus("fResa"); }
+// Righe ingrediente aggiunte nella nuova produzione (fuori ricetta):
+// ogni riga conserva l'ingrediente scelto per mostrare i suoi lotti
+let agg = [];
+function addRiga() { agg.push({ prod: 0 }); render(); }
+function remAgg(i) { agg.splice(i, 1); render(); }
+function setAggProd(i, v) { agg[i].prod = Number(v); render(); }
+// ELIMINAZIONE ARRIVO: bloccata se il lotto è già consumato da produzioni
+// (la tracciabilità non può puntare a un lotto sparito). Altrimenti rimuove
+// dal registro e torna alla lista arrivi.
+let delMsg = null;
+function delArrivo(id) {
+  const usati = consumi.filter(c => c.orig === "ingresso" && c.from === id);
+  if (usati.length) {
+    delMsg = "❌ Impossibile eliminare: questo lotto è già consumato da " + usati.length + " produzioni. Eliminare prima le produzioni che lo usano.";
+    render(); return;
+  }
+  ingressi = ingressi.filter(a => a.id !== id);
+  delMsg = null;
+  go("arrivi");
+}
+// Righe della NUOVA RICETTA: stesse combobox di modifica, ma stato proprio
+let nrRows = [{ prod: 0 }];
+// Unità di misura per la RESA delle ricette, raggruppate per tipo.
+// Massa e volume coprono le creme e gli impasti; teglie/vasetti/porzioni
+// sono le misure "da laboratorio" che i pasticceri usano davvero.
+const UM_RESA = [["Massa", ["g", "kg"]], ["Volume", ["ml", "lt"]], ["Laboratorio", ["teglie", "vasetti", "porzioni", "pz"]]];
+function renderUmResa(sel) {
+  return '<select style="flex:1">' + UM_RESA.map(([g, arr]) =>
+    '<optgroup label="' + g + '">' + arr.map(u =>
+      '<option value="' + u + '"' + (u === sel ? " selected" : "") + '>' + u + '</option>').join("") + '</optgroup>').join("") + '</select>';
+}
+function addNrRow() { nrRows.push({ prod: 0 }); render(); }
+function remNrRow(i) { nrRows.splice(i, 1); render(); }
+function pickNr(key, id) { const i = Number(key.slice(5)); nrRows[i] = { prod: id }; comboState[key] = { q: "", sel: id, open: false }; render(); }
+function queryNr(key, v) { comboState[key] = { ...(comboState[key]||{}), q: v, open: true }; render(); keepFocus("cb-" + key); }
+// Righe AGGIUNTE in modifica ricetta (le righe originali restano al loro posto)
+let mrRows = [];
+function addMrRow() { mrRows.push({ prod: 0 }); render(); }
+function remMrRow(i) { mrRows.splice(i, 1); render(); }
+function pickMr(key, id) { const i = Number(key.slice(5)); mrRows[i] = { prod: id }; comboState[key] = { q: "", sel: id, open: false }; render(); }
+function queryMr(key, v) { comboState[key] = { ...(comboState[key]||{}), q: v, open: true }; render(); keepFocus("cb-" + key); }
+
+// Navigazione: cambia vista (con eventuali parametri) e ridisegna tutto.
+// Ogni spostamento salva nella cronologia la vista di partenza, così il
+// pulsante "← Indietro" riporta sempre da dove si è arrivati, anche nei
+// salti incrociati (es. da ricetta → anagrafica ingrediente).
+let history = [];
+function go(view) {
+  history.push({ view: current, params: params.slice() });
+  if (history.length > 30) history.shift(); // cronologia limitata
+  current = view;
+  params = Array.prototype.slice.call(arguments, 1);
+  render();
+}
+// Torna alla vista precedente (se esiste); in dashboard non fa nulla
+function back() {
+  if (!history.length) return;
+  const prev = history.pop();
+  current = prev.view;
+  params = prev.params;
+  render();
+}
+
+// Render principale: costruisce il menu laterale (solo le viste con label)
+// e inietta l'HTML della vista corrente nel contenuto.
+// Ogni pagina tranne la Dashboard ha il pulsante universale "← Indietro".
+function render() {
+  const nav = Object.entries(views).filter(v=>v[1].label)
+    .map(v=>'<button class="' + (current===v[0] ? "active" : "") + '" onclick="go(\'' + v[0] + '\')">' + v[1].label + '</button>').join("");
+  document.getElementById("nav").innerHTML = nav;
+  const canBack = current !== "dashboard" && history.length > 0;
+  document.getElementById("main").innerHTML =
+    (docMsg ? '<div class="hint" style="background:var(--green-bg);border-color:#a7f3d0;color:var(--green);margin-bottom:12px">' + docMsg + '</div>' : "") +
+    (canBack ? '<span class="back" onclick="back()" style="font-weight:600;margin-bottom:16px">← Indietro</span><br>' : "") +
+    views[current].render(null, ...params);
+}
+render();
+</script>
+</body>
+</html>
