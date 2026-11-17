@@ -212,6 +212,15 @@ ol.etichetta li { margin-bottom: 3px; }
 .anag-fam { max-height: 300px; }
 .scroll-list table { margin: 0; }
 .scroll-list tr[data-id], .scroll-list tr[data-forn] { cursor: pointer; }
+
+/* La scheda di dettaglio non si allunga all'infinito: il contenuto scrolla
+   dentro la card, l'intestazione resta fissa e le azioni (Salva/Elimina)
+   restano sempre visibili appiccicate in fondo. */
+#dettaglio-anagrafica-testo { max-height: 70vh; overflow-y: auto; }
+#dettaglio-anagrafica-testo .f-azioni:last-child {
+  position: sticky; bottom: 0; background: var(--card);
+  padding: 10px 0 2px; margin-bottom: 0;
+}
 .chip-allergene { cursor: pointer; user-select: none; }
 .chip-allergene:hover { opacity: 0.8; }
 .anag-fam-riga { display: flex; align-items: center; gap: 8px;

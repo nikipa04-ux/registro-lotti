@@ -240,7 +240,9 @@ ricetta (qui NON si tocca, al massimo la si apre).
   - **🏷 Famiglie**: creazione inline, **rinomina inline ✏️ che si
     propaga ovunque** (tutto JOINa per id), conteggio prodotti cliccabile
     (filtra la card Prodotti), eliminazione solo se non usata
-- **Scheda di dettaglio** (pannello in-page, clic su una riga):
+- **Scheda di dettaglio** (pannello in-page, clic su una riga): il
+  contenuto scrolla DENTRO la scheda (max-height, intestazione fissa) e
+  le azioni Salva/Elimina restano sempre visibili in fondo:
   - *ingrediente*: nome, denominazione legale* (per l'etichetta dei
     prodotti finiti), marca abituale (default degli arrivi),
     conservazione*, i 14 allergeni come chips on/off (Reg. UE 1169/2011),
