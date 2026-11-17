@@ -17,18 +17,22 @@ registro-lotti/
 │   ├── seed.py            # dati di prova (scenario del pasticciere)
 │   ├── api/               # ENDPOINT (ricevono richieste, chiamano la logica)
 │   │   ├── anagrafiche.py #   fornitori, prodotti, famiglie, allergeni
-│   │   ├── arrivi.py      #   lotti in ingresso, allegati
+│   │   ├── arrivi.py      #   lotti in ingresso: lista, dettaglio, registrazione
 │   │   ├── produzioni.py  #   lotti interni, consumi, etichetta calcolata
+│   │   ├── ricette.py     #   il master: crea e corregge le ricette
 │   │   ├── magazzino.py   #   giacenze, scadenze
 │   │   └── dashboard.py   #   quadro riassuntivo del giorno
 │   ├── logic/             # LOGICA DI BUSINESS (funzioni pure, testabili)
 │   │   ├── um.py          #   conversioni: solo g↔kg e ml↔lt, mai implicite
 │   │   ├── fefo.py        #   proposta lotti che scadono prima
 │   │   ├── lotti.py       #   generazione codice SIGLA-AAAAMMGG-NN
+│   │   ├── arrivi.py      #   regole di registrazione di un arrivo
+│   │   ├── produzioni.py  #   proposta FEFO e verbale della produzione
+│   │   ├── ricette.py     #   il master: upsert ricetta, famiglia, righe
 │   │   ├── etichetta.py   #   lista ingredienti calcolata dai consumi
 │   │   ├── foodcost.py    #   costi: storico prezzi dagli arrivi
 │   │   └── dashboard.py   #   scadenze imminenti e contatori
-│   └── ui/                # interfaccia reale (dashboard) servita dal backend
+│   └── ui/                # interfaccia reale (dashboard + arrivi + produzioni)
 ├── data/                  # qui vive il DB (fuori da git)
 ├── docs/
 │   ├── prototipo.html     # prototipo cliccabile della UI (riferimento)
@@ -85,10 +89,183 @@ scadenza, ecc.). Per ricaricare la demo da zero: `python -m app.seed --reset`.
 
 ## Interfaccia
 
-La dashboard è la prima schermata reale: stesso design del prototipo
+### Dashboard
+
+La prima schermata reale: stesso design del prototipo
 (`docs/prototipo.html`), ma i dati arrivano da `/api/dashboard` invece che da
-array finti. Le altre sezioni (arrivi, produzioni, magazzino, anagrafiche)
-sono segnate "presto" nella navigazione e arrivano nelle prossime iterazioni.
+array finti. Stat cards, scadenze entro 7 giorni con badge colore, pulsante
+rapido per il nuovo arrivo.
+
+### Arrivi
+
+La sezione con cui si registra tutto ciò che entra:
+
+- **Filtri a cascata** come nel prototipo: una casella di ricerca (prodotto,
+  marca, lotto o fornitore) + select fornitore + select ingrediente +
+  finestra di scadenza (≤3 giorni / ≤7 giorni / scaduti) + contatore
+  "N di M arrivi"
+- **Tabella** come la demo: prodotto, marca in badge (del lotto, con default
+  dall'anagrafica), lotto, fornitore, arrivo, scadenza colorata, quantità,
+  prezzo unitario, totale e totale+IVA (CALCOLATI dal server)
+- **Dettaglio lotto**: clic su una riga → dati del lotto, costi e
+  tracciabilità avanti ("usato in": quali produzioni l'hanno consumato),
+  più bottone "🗑 Elimina" con conferma
+- **Nuovo arrivo** (modale): ingrediente e fornitore sono combobox con
+  typeahead (tendina raggruppata per conservazione 🧊); se il nome cercato
+  non esiste compare "➕ Crea..." che apre la creazione rapida: l'ingrediente
+  nasce lì (conservazione, u.m., sigla, marca, denominazione legale) e resta
+  selezionato. Date, quantità, prezzo e IVA facoltativi.
+
+Le regole di registrazione vivono nel server (`app/logic/arrivi.py`):
+residua = quantità in partenza, un prodotto di laboratorio non può "arrivare"
+(nasce da una produzione), la scadenza non può precedere l'arrivo, lotto
+duplicato per lo stesso fornitore respinto. Il form mostra i messaggi
+d'errore del server così come sono.
+
+**Eliminazione PROTETTA** (`DELETE /api/arrivi/{arrivo_id}`): un lotto già
+consumato in un verbale di produzione non si elimina (la tracciabilità non
+si riscrive: il messaggio dice di annullare invece quella produzione);
+senza consumi l'arrivo si elimina dal bottone 🗑 nel dettaglio.
+
+**Regola dei menu a cascata**: in OGNI combobox il bottone "➕ Crea..." è
+sempre l'ULTIMA riga della tendina; la creazione rapida non fa mai cambiare
+schermata e il nome cercato arriva già precompilato (modificabile).
+
+Le altre sezioni (scadenze, magazzino) sono segnate "presto" nella
+navigazione e arrivano nei prossimi capitoli.
+
+### Produzioni
+
+La sezione in cui nascono i lotti interni (semilavorati e dolci finiti).
+La produzione è SLAVE della ricetta MASTER: la proposta parte dalle righe
+della ricetta, l'operatore al massimo corregge.
+
+- **Ricerca** per prodotto o lotto interno + contatore; tabella demo:
+  prodotto + famiglia in badge, lotto mono, data produzione, scadenza
+  colorata, "N lotti usati"
+- **Dettaglio**: clic su una riga → dati del lotto, tracciabilità INDIETRO
+  ("deriva da": i lotti consumati con le quantità) e AVANTI ("usato in"),
+  etichetta ingredienti CALCOLATA dal verbale (denominazioni in ordine di
+  peso, senza quantità) + "Contiene (allergeni):" dichiarazione degli allergeni
+- **Nuova produzione** (modale a passi 1-2-3):
+  1. prodotto da produrre (solo prodotti di laboratorio CON ricetta) →
+     carica la proposta. Il combobox segue la regola del ➕: si può CREARE
+     il prodotto al volo (u.m. + sigla) senza chiudere il form; se poi manca
+     la ricetta, il warning offre "➕ Crea la ricetta di X ora": la modale
+     ricetta si apre SOPRA il form produzione e al salvataggio si torna
+     alla proposta FEFO, già pronta da salvare
+  2. la proposta FEFO: una riga per ingrediente di ricetta con i chip dei
+     lotti proposti (stesso ordine FEFO del server, quantità modificabile,
+     riga escludibile ✕/↩), righe aggiungibili fuori ricetta (ingredienti
+     acquistati e prodotti di laboratorio), alert rosso se manca merce
+  3. date e quantità prodotta (default = resa della ricetta) → salva
+
+Al salvataggio il server RIVALIDA tutto (`app/logic/produzioni.py`):
+giacenze sufficienti, consumi non vuoti (il verbale), niente lotto ripetuto,
+scadenza non prima della produzione, scarico della `quantita_residua` dei
+lotti in ingresso (le giacenze non si scrivono mai a mano), famiglia
+SNAPSHOT dalla ricetta, codice `SIGLA-AAAAMMGG-NN`.
+
+**Nessun tag "semilavorato"**: è una famiglia a etichettare la riga. Ogni
+ingrediente di ricetta mostra il badge della sua FAMIGLIA (quella della
+sua ricetta, dove la famiglia nasce per regola di design); le famiglie
+sono libere: l'utente ne crea quante vuole (`POST /api/anagrafiche/famiglie`)
+e il badge cambia di conseguenza.
+
+**Eliminazione PROTETTA** (`DELETE /api/produzioni/{lotto_id}`): un lotto
+interno già consumato da altre produzioni non si elimina; se nessuno lo
+usa, il bottone 🗑 nel dettaglio annulla il verbale e RIPRISTINA le
+giacenze dei lotti in ingresso consumati (le giacenze si scrivono solo in
+registrazione, quindi si ripristinano solo qui).
+
+v0.1: i lotti interni consumati (prodotti di laboratorio) non tracciano
+la residua: la loro disponibilità è la quantità prodotta. Il cambio manuale
+dei lotti proposti ("cambia lotti" della demo) è in backlog: la UI mostra
+la proposta FEFO e l'operatore corregge quantità, esclusioni e aggiunte.
+
+### Ricette
+
+Il MASTER delle produzioni, anticipato rispetto alla tabella di marcia per
+colmare il buco "prodotto senza ricetta": senza ricetta non si produce, e
+la ricetta ora si crea e si corregge dall'interfaccia.
+
+- **Lista**: ricerca per prodotto + contatore (prodotto + famiglia in
+  badge, resa, numero ingredienti, presenza del procedimento), riga
+  cliccabile → dettaglio con righe complete (con badge famiglia
+  dell'ingrediente), resa, sigla del lotto e procedimento
+- **Nuova ricetta** (modale): prodotto = combobox typeahead sui SOLI
+  candidati (senza ricetta e senza lotti in ingresso: chi arriva dal
+  fornitore non si produce) con creazione rapida "➕ Crea" (u.m. + sigla;
+  la famiglia arriverà dalla ricetta); famiglia = select di quelle
+  esistenti OPPURE nome nuovo (la famiglia nasce qui: l'utente ne crea
+  quante ne vuole); resa testuale (es. "60 pz"), procedimento facoltativo,
+  righe ingrediente+quantità (ingredienti acquistati e prodotti di
+  laboratorio, come le aggiunte delle produzioni)
+- **Modifica**: stessa modale prefilled; le righe RIMPIAZZANO le vecchie
+  (la ricetta è il master), le produzioni passate restano con il loro
+  snapshot
+- **Eliminazione PROTETTA**: rifiutata se il prodotto ha produzioni
+  registrate (`DELETE /api/ricette/{prodotto_id}`); senza produzioni la
+  ricetta si elimina e il prodotto perde la famiglia
+
+Regole nel server (`app/logic/ricette.py`): righe non vuote con quantità
+maggiori di zero, niente ingrediente ripetuto, ingrediente inesistente
+respinto, prodotto con lotti in arrivo respinto ("è un ingrediente
+acquistato"), famiglia obbligatoria (id esistente o nome nuovo, riusata
+se esiste già senza badare a maiuscole), e SYNC: `prodotti.famiglia_id`
+rispecchia la famiglia della ricetta così combo e filtri la vedono subito.
+Se un prodotto resta senza ricetta, il messaggio della produzione dice di
+crearla qui.
+
+### Anagrafiche
+
+La casa dei dati che nascono una volta sola (regola di design: i dati si
+chiedono dove nascono, non dove si usano): conservazione e denominazione
+legale con l'ingrediente, contatti con il fornitore, famiglia con la
+ricetta (qui NON si tocca, al massimo la si apre).
+
+- **Quattro card impilate**, ognuna con contatore, ricerca dedicata e
+  lista scrollabile internamente:
+  - **🛒 Ingredienti**: nome, marca abituale, conservazione, allergeni
+    (⚠ max 2 + "+n"), u.m., sigla, n. arrivi; la ricerca copre nome e
+    marca
+  - **🥣 Prodotti**: SOLO prodotti con ricetta (gerarchia stretta: il
+    prodotto esiste attraverso la sua ricetta, che è il master). Bottone
+    **➕ Nuovo**: la modale crea l'anagrafica (nome, u.m., sigla) e apre
+    SUBITO la ricetta; salvando, il prodotto compare in card. Famiglia in
+    badge, allergeni EREDITATI dalla ricetta (calcolati, mai scritti a
+    mano), u.m., sigla, n. produzioni; filtro per famiglia (badge
+    cliccabile, rimovibile con ✕)
+  - **🚚 Fornitori**: nome + P.IVA, n. arrivi
+  - **🏷 Famiglie**: creazione inline, **rinomina inline ✏️ che si
+    propaga ovunque** (tutto JOINa per id), conteggio prodotti cliccabile
+    (filtra la card Prodotti), eliminazione solo se non usata
+- **Scheda di dettaglio** (pannello in-page, clic su una riga):
+  - *ingrediente*: nome, denominazione legale* (per l'etichetta dei
+    prodotti finiti), marca abituale (default degli arrivi),
+    conservazione*, i 14 allergeni come chips on/off (Reg. UE 1169/2011),
+    u.m., sigla, note + arrivi recenti cliccabili (saltano al dettaglio
+    del lotto, sezione Arrivi)
+  - *prodotto di laboratorio*: nome, u.m., sigla, note; famiglia e
+    allergeni READ-ONLY ereditati dalla ricetta ("se cambia la ricetta,
+    cambiano qui") + bottoni **✏️ Modifica la ricetta / ➕ Crea la
+    ricetta** (la modale ricetta si apre sopra la scheda e al salvataggio
+    si torna qui, aggiornata) + produzioni recenti cliccabili
+  - *fornitore*: ragione sociale, P.IVA, telefono, email, note + arrivi
+    recenti
+- **+ Nuovo** per ingrediente, fornitore e prodotto di laboratorio
+  (modale; per le famiglie riga inline). La denominazione legale è
+  suggerita già precompilata dal nome. Il prodotto di laboratorio nasce
+  con la sua ricetta: la modale crea l'anagrafica e apre subito il form
+  ricetta; se si annulla, il prodotto resta un "candidato" visibile
+  solo dalla sezione Ricette finché non avrà la ricetta.
+- **Eliminazioni PROTETTE** (`app/logic/anagrafiche.py`): ingrediente con
+  arrivi rifiutato, prodotto con arrivi/produzioni/ricetta rifiutato,
+  fornitore con arrivi rifiutato. La tracciabilità non si riscrive.
+- Endpoint: GET `/api/anagrafiche/ingredienti`, `/prodotti-lab`,
+  `/prodotti/{id}`, `/fornitori/{id}`, PUT prodotti/fornitori/famiglie
+  (rinomina), DELETE prodotti/fornitori, POST `/ingredienti` (dal modulo,
+  con denominazione obbligatoria).
 
 ## Pubblicazione su GitHub (GitHub Desktop)
 

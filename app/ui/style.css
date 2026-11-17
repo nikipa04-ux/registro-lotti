@@ -76,3 +76,153 @@ td.empty { color: var(--muted); text-align: center; }
 .conn.ok { color: var(--green); font-weight: 600; }
 .conn.err { color: var(--red); font-weight: 600; }
 .loading { color: var(--muted); padding: 20px; text-align: center; }
+.muted { color: var(--muted); font-size: 12px; }
+
+/* Barra filtri a cascata della lista arrivi (come la demo) */
+.filtri { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.filtri input[type="search"] { width: 240px; }
+.filtri select { padding: 9px 10px; font-size: 14px; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--card); color: var(--ink); }
+.filtri .muted { margin-left: auto; white-space: nowrap; }
+th.num, td.num { text-align: right; }
+#tabella-arrivi { overflow-x: auto; }
+
+/* Combobox con typeahead e creazione rapida (come la demo) */
+.combo { position: relative; }
+.combo-dd { position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  max-height: 240px; overflow: auto; z-index: 20;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, .08); }
+.combo-dd .cat { padding: 6px 12px; font-size: 11px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em; background: #f8fafc; }
+.combo-dd .it { display: flex; justify-content: space-between; gap: 10px;
+  padding: 8px 12px; cursor: pointer; font-size: 13.5px; }
+.combo-dd .it:hover { background: var(--brand); color: #fff; }
+.combo-dd .it .sig { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; }
+.combo-dd .it:hover .sig { color: #e0f2fe; }
+.combo-dd .new { padding: 9px 12px; cursor: pointer; color: var(--brand);
+  font-weight: 600; font-size: 13.5px; border-bottom: 1px solid var(--line); }
+.combo-dd .new:hover { background: var(--green-bg); color: var(--green); }
+.combo-dd .vuoto { padding: 10px 12px; color: var(--muted); }
+.hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.req { color: var(--red); }
+
+/* Pannello di creazione rapida dentro la modale */
+.qc { border: 1px dashed var(--brand); border-radius: 8px; padding: 12px;
+  margin-bottom: 12px; background: #f0f9ff; }
+.qc-tit { font-size: 13px; margin-bottom: 10px; color: var(--ink); }
+.qc-nome { border: none; border-bottom: 2px solid var(--brand); background: transparent;
+  font: inherit; font-weight: 600; color: var(--ink); padding: 2px 4px; width: 180px; }
+.qc-nome:focus { outline: none; }
+
+
+/* Messaggio di conferma (flash) */
+.flash { background: var(--green-bg); border: 1px solid #bbf7d0; color: var(--green);
+  padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 13px; }
+
+/* Righe cliccabili della lista arrivi */
+#tabella-arrivi tr[data-id] { cursor: pointer; }
+#tabella-arrivi tr[data-id]:hover td { background: #f8fafc; }
+
+/* Dettaglio lotto: riga etichetta → valore */
+.det-riga { display: flex; justify-content: space-between; gap: 12px;
+  padding: 7px 0; border-bottom: 1px solid #f3f4f6; font-size: 13.5px; }
+.det-riga span { color: var(--muted); }
+.card .chiudi { float: right; background: none; border: none; color: var(--muted);
+  cursor: pointer; font-size: 14px; padding: 2px 6px; }
+.card .chiudi:hover { color: var(--red); }
+
+/* Modale "Nuovo arrivo" */
+.overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, .55);
+  display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+.overlay[hidden] { display: none; }
+.modal { background: var(--card); border-radius: 12px; padding: 20px 22px;
+  width: 560px; max-width: 100%; max-height: calc(100vh - 40px); overflow: auto; }
+.modal h2 { font-size: 16px; margin: 0 0 2px; color: var(--ink);
+  text-transform: none; letter-spacing: 0; }
+.modal .sub { margin-bottom: 14px; }
+
+.f-row { display: flex; gap: 12px; }
+.f-row .f-campo { flex: 1; min-width: 0; }
+.f-campo { margin-bottom: 12px; }
+.f-campo label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.f-campo .um { color: var(--muted); font-style: italic; }
+.f-campo input, .f-campo select { width: 100%; padding: 8px 10px; font-size: 14px;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); }
+.f-campo input:focus, .f-campo select:focus { outline: 2px solid var(--brand); border-color: var(--brand); }
+.f-errore { background: var(--red-bg); color: var(--red); border: 1px solid #fecaca;
+  padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+.f-azioni { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+
+
+/* ---- Produzioni ---- */
+.btn.mini { padding: 3px 9px; font-size: 12px; }
+.btn.sec.mini.rosso { color: var(--red); border-color: #fecaca; }
+.btn.sec.mini.rosso:hover { background: var(--red-bg); }
+
+.modal.largo { width: 680px; }
+
+.steps { display: flex; gap: 8px; margin: 4px 0 14px; }
+.step { font-size: 11px; color: var(--muted); background: #f1f5f9;
+  border-radius: 99px; padding: 3px 10px; }
+.step.on { background: var(--brand); color: #fff; }
+
+.riga { border-bottom: 1px solid var(--line); padding: 10px 2px; }
+.riga:last-of-type { border-bottom: none; }
+.riga.esclusa { opacity: .55; }
+.riga.aggiunta { border: 1px dashed var(--amber); background: var(--amber-bg);
+  border-radius: 8px; padding: 10px; margin-top: 8px; }
+.riga-testa { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.qta-input { width: 76px; padding: 6px 8px; font-size: 14px; text-align: right;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); }
+.qta-input:focus { outline: 2px solid var(--brand); border-color: var(--brand); }
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.check-chip { background: var(--green-bg); border: 1px solid #bbf7d0; color: var(--ink);
+  border-radius: 8px; padding: 5px 9px; font-size: 12.5px; }
+.chips .warn-chip, .chips .muted { align-self: center; }
+.warn { background: var(--red-bg); color: var(--red); border: 1px solid #fecaca;
+  padding: 10px 12px; border-radius: 8px; margin: 8px 0; font-size: 13px; }
+
+.sel-aggiunta { flex: 1; min-width: 200px; padding: 8px 10px; font-size: 14px;
+  border: 1px solid var(--amber); border-radius: 8px; background: #fff; color: var(--ink); }
+
+ol.etichetta { margin: 6px 0 10px; padding-left: 22px; font-size: 13.5px; }
+ol.etichetta li { margin-bottom: 3px; }
+
+#tabella-produzioni tr[data-id] { cursor: pointer; }
+#tabella-produzioni tr[data-id]:hover td { background: #f8fafc; }
+
+/* ---- Ricette ---- */
+.f-campo textarea { width: 100%; padding: 8px 10px; font: inherit;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  color: var(--ink); resize: vertical; }
+.f-campo textarea:focus { outline: 2px solid var(--brand); border-color: var(--brand); }
+#tabella-ricette tr[data-id] { cursor: pointer; }
+#tabella-ricette tr[data-id]:hover td { background: #f8fafc; }
+
+/* ---- Anagrafiche: quattro card con liste scrollabili ---- */
+.card-head { display: flex; justify-content: space-between; align-items: center;
+  gap: 10px; margin-bottom: 10px; }
+.card-head h2 { margin: 0; }
+.anag-cerca { width: 100%; margin-bottom: 10px; }
+.scroll-list { border: 1px solid var(--line); border-radius: 8px; overflow-y: auto; }
+.anag-alta { max-height: 420px; }
+.anag-bassa { max-height: 260px; }
+.anag-fam { max-height: 300px; }
+.scroll-list table { margin: 0; }
+.scroll-list tr[data-id], .scroll-list tr[data-forn] { cursor: pointer; }
+.chip-allergene { cursor: pointer; user-select: none; }
+.chip-allergene:hover { opacity: 0.8; }
+.anag-fam-riga { display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.anag-fam-riga:last-child { border-bottom: none; }
+.anag-nome-fam { flex: 1; cursor: pointer; }
+#tabella-anag-ing td, #tabella-anag-pro td, #tabella-anag-for td { padding: 8px 10px; }
+.vai-arrivo, .vai-produzione { cursor: pointer; }
+#anag-filtro-fam { margin-bottom: 8px; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px; margin-bottom: 10px; }
+.form-grid .full { grid-column: 1 / -1; }
+.form-grid label { display: block; font-size: 11px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 4px; }

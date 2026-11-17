@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import db
-from .api import anagrafiche, arrivi, dashboard, magazzino, produzioni
+from .api import anagrafiche, arrivi, dashboard, magazzino, produzioni, ricette
 
 app = FastAPI(
     title="Registro Lotti",
@@ -22,6 +22,7 @@ app = FastAPI(
 app.include_router(anagrafiche.router)
 app.include_router(arrivi.router)
 app.include_router(produzioni.router)
+app.include_router(ricette.router)
 app.include_router(magazzino.router)
 app.include_router(dashboard.router)
 

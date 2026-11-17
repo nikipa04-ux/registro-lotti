@@ -1,26 +1,63 @@
 """Anagrafiche: fornitori, prodotti (ingredienti + laboratorio), famiglie, allergeni.
 
 Regola: i prodotti di laboratorio NON dichiarano allergeni: li ereditano
-dalla ricetta. Qui si serve solo ciò che l'anagrafica possiede.
+dalla ricetta. Qui si serve solo ciò che l'anagrafica possiede; la famiglia
+nasce nella ricetta (master) e in anagrafica non si tocca.
 """
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..db import connessione
+from ..logic.anagrafiche import (
+    ErroreAnagrafica,
+    crea_ingrediente,
+    dettaglio_fornitore,
+    dettaglio_prodotto,
+    elimina_fornitore,
+    elimina_prodotto,
+    lista_ingredienti,
+    lista_prodotti as lista_prodotti_lab,
+    rinomina_famiglia,
+    salva_fornitore,
+    salva_prodotto,
+)
 
 router = APIRouter(prefix="/api/anagrafiche", tags=["anagrafiche"])
 
 
+def _errore(e: ErroreAnagrafica):
+    raise HTTPException(422, str(e))
+
+
 @router.get("/fornitori")
-def lista_fornitori():
+def lista_fornitori(testo: str = ""):
+    """Con n_arrivi: per la card Anagrafiche e per le combo."""
     with connessione() as conn:
+        q = (testo or "").strip().lower()
         return [
             dict(r) for r in conn.execute(
                 "SELECT f.*, COUNT(li.id) AS n_arrivi FROM fornitori f "
                 "LEFT JOIN lotti_ingresso li ON li.fornitore_id = f.id "
                 "GROUP BY f.id ORDER BY f.nome"
             ).fetchall()
+            if not q or q in r["nome"].lower()
         ]
+
+
+@router.get("/ingredienti")
+def ingredienti(testo: str = ""):
+    """Card 🛒: ingredienti con allergeni dichiarati e n. arrivi."""
+    with connessione() as conn:
+        return lista_ingredienti(conn, testo)
+
+
+@router.get("/prodotti-lab")
+def prodotti_lab(testo: str = "", famiglia_id: int = 0):
+    """Card 🥣: prodotti di laboratorio, allergeni EREDITATI dalla ricetta."""
+    with connessione() as conn:
+        # NB: qui serve la FUNZIONE della logica, non l'endpoint /prodotti
+        # (stesso nome nel modulo): per questo l'import è con alias.
+        return lista_prodotti_lab(conn, testo, famiglia_id)
 
 
 @router.get("/prodotti")
@@ -55,6 +92,8 @@ def lista_allergeni():
         return [dict(r) for r in conn.execute("SELECT * FROM allergeni ORDER BY id").fetchall()]
 
 
+# ---- creazione rapida (dalle combo di altre sezioni) ----
+
 class NuovoFornitore(BaseModel):
     nome: str
     piva: str | None = None
@@ -75,19 +114,174 @@ def crea_fornitore(dati: NuovoFornitore):
         return {"id": cur.lastrowid, **dati.model_dump()}
 
 
+class NuovoProdotto(BaseModel):
+    nome: str
+    conservazione: str
+    unita_misura: str
+    sigla: str | None = None
+    marca: str | None = None
+    denominazione_legale: str | None = None
+
+
+@router.post("/prodotti", status_code=201)
+def crea_prodotto(dati: NuovoProdotto):
+    """Creazione rapida INGREDIENTE (famiglia NULL) dalle combo delle altre
+    schermate. Qui nascono i dati dell'anagrafica (conservazione, u.m.,
+    denominazione legale): in Anagrafiche si completerà il resto (allergeni,
+    note). I prodotti di laboratorio NON nascono qui: la loro anagrafica è
+    la ricetta.
+    """
+    with connessione() as conn:
+        try:
+            p = crea_ingrediente(conn, dati.model_dump(), da_anagrafica=False)
+        except ErroreAnagrafica as e:
+            _errore(e)
+        conn.commit()
+        return p
+
+
+# ---- il modulo Anagrafiche ----
+
+class NuovoIngrediente(BaseModel):
+    nome: str
+    conservazione: str
+    unita_misura: str
+    sigla: str | None = None
+    marca: str | None = None
+    denominazione_legale: str | None = None
+    note: str | None = None
+    allergeni: list[int] = []
+
+
+@router.post("/ingredienti", status_code=201)
+def nuovo_ingrediente(dati: NuovoIngrediente):
+    """Il "+ Nuovo" della card Ingredienti: qui la denominazione legale è
+    OBBLIGATORIA (finisce nell'etichetta dei prodotti finiti)."""
+    with connessione() as conn:
+        try:
+            p = crea_ingrediente(conn, dati.model_dump(), da_anagrafica=True)
+        except ErroreAnagrafica as e:
+            _errore(e)
+        conn.commit()
+        return p
+
+
+class SalvaProdotto(BaseModel):
+    nome: str
+    conservazione: str | None = None
+    unita_misura: str
+    sigla: str | None = None
+    marca: str | None = None
+    denominazione_legale: str | None = None
+    note: str | None = None
+    allergeni: list[int] | None = None
+
+
+@router.get("/prodotti/{prodotto_id}")
+def scheda_prodotto(prodotto_id: int):
+    with connessione() as conn:
+        try:
+            return dettaglio_prodotto(conn, prodotto_id)
+        except ErroreAnagrafica as e:
+            _errore(e)
+
+
+@router.put("/prodotti/{prodotto_id}")
+def modifica_prodotto(prodotto_id: int, dati: SalvaProdotto):
+    with connessione() as conn:
+        try:
+            p = salva_prodotto(conn, {"id": prodotto_id, **dati.model_dump()})
+        except ErroreAnagrafica as e:
+            _errore(e)
+        conn.commit()
+        return p
+
+
+@router.delete("/prodotti/{prodotto_id}", status_code=204)
+def elimina_prodotto_r(prodotto_id: int):
+    """Eliminazione protetta: rifiutata se ci sono arrivi, produzioni
+    o una ricetta che la usa."""
+    with connessione() as conn:
+        try:
+            elimina_prodotto(conn, prodotto_id)
+        except ErroreAnagrafica as e:
+            _errore(e)
+        conn.commit()
+
+
+class SalvaFornitore(BaseModel):
+    nome: str
+    piva: str | None = None
+    telefono: str | None = None
+    email: str | None = None
+    note: str | None = None
+
+
+@router.get("/fornitori/{fornitore_id}")
+def scheda_fornitore(fornitore_id: int):
+    with connessione() as conn:
+        try:
+            return dettaglio_fornitore(conn, fornitore_id)
+        except ErroreAnagrafica as e:
+            _errore(e)
+
+
+@router.put("/fornitori/{fornitore_id}")
+def modifica_fornitore(fornitore_id: int, dati: SalvaFornitore):
+    with connessione() as conn:
+        try:
+            f = salva_fornitore(conn, {"id": fornitore_id, **dati.model_dump()})
+        except ErroreAnagrafica as e:
+            _errore(e)
+        conn.commit()
+        return f
+
+
+@router.delete("/fornitori/{fornitore_id}", status_code=204)
+def elimina_fornitore_r(fornitore_id: int):
+    """Eliminazione protetta: rifiutata se ha arrivi registrati."""
+    with connessione() as conn:
+        try:
+            elimina_fornitore(conn, fornitore_id)
+        except ErroreAnagrafica as e:
+            _errore(e)
+        conn.commit()
+
+
+class RinominaFamiglia(BaseModel):
+    nome: str
+
+
+@router.put("/famiglie/{famiglia_id}")
+def rinomina(famiglia_id: int, dati: RinominaFamiglia):
+    """Rinomina inline della famiglia: si propaga ovunque (tutto JOINa per id)."""
+    with connessione() as conn:
+        try:
+            f = rinomina_famiglia(conn, famiglia_id, dati.nome)
+        except ErroreAnagrafica as e:
+            _errore(e)
+        conn.commit()
+        return f
+
+
 class NuovaFamiglia(BaseModel):
     nome: str
 
 
 @router.post("/famiglie", status_code=201)
 def crea_famiglia(dati: NuovaFamiglia):
-    """Eliminazione protetta: la famiglia si cancella solo se nessun prodotto la usa."""
     with connessione() as conn:
-        cur = conn.execute(
-            "INSERT INTO famiglie (nome) VALUES (?)", (dati.nome.strip(),)
-        )
+        nome = dati.nome.strip()
+        if not nome:
+            raise HTTPException(422, "Il nome della famiglia è obbligatorio")
+        dup = conn.execute(
+            "SELECT id FROM famiglie WHERE LOWER(nome) = LOWER(?)", (nome,)
+        ).fetchone()
+        if dup:
+            raise HTTPException(422, "Esiste già una famiglia con questo nome")
+        cur = conn.execute("INSERT INTO famiglie (nome) VALUES (?)", (nome,))
         conn.commit()
-        return {"id": cur.lastrowid, "nome": dati.nome.strip()}
+        return {"id": cur.lastrowid, "nome": nome}
 
 
 @router.delete("/famiglie/{famiglia_id}", status_code=204)

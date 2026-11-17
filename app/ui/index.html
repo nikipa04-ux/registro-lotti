@@ -9,40 +9,562 @@
 <body>
 <div class="layout">
 
-  <!-- Navigazione (stessa del prototipo; le altre sezioni arrivano nelle
-       prossime iterazioni: la struttura qui sotto è già pronta) -->
+  <!-- Navigazione (stessa del prototipo). Le sezioni non ancora costruite
+       restano disabilitate: si accendono una capitolo alla volta. -->
   <aside>
     <div class="logo">Registro Lotti<small>gestione lotti e scadenze</small></div>
     <nav>
-      <button class="active">⌂ Dashboard</button>
-      <button class="disabled" title="Prossima iterazione">📥 Arrivi<small>presto</small></button>
-      <button class="disabled" title="Prossima iterazione">🏭 Produzioni<small>presto</small></button>
-      <button class="disabled" title="Prossima iterazione">⏰ Scadenze<small>presto</small></button>
-      <button class="disabled" title="Prossima iterazione">📦 Magazzino<small>presto</small></button>
-      <button class="disabled" title="Prossima iterazione">📇 Anagrafiche<small>presto</small></button>
+      <button data-sez="dashboard" class="active">⌂ Dashboard</button>
+      <button data-sez="arrivi">📥 Arrivi</button>
+      <button data-sez="produzioni">🏭 Produzioni</button>
+      <button data-sez="ricette">📋 Ricette</button>
+      <button class="disabled" title="Prossimo capitolo">⏰ Scadenze<small>presto</small></button>
+      <button class="disabled" title="Prossimo capitolo">📦 Magazzino<small>presto</small></button>
+      <button data-sez="anagrafiche">📇 Anagrafiche</button>
     </nav>
   </aside>
 
   <main>
-    <h1>Dashboard</h1>
-    <p class="sub"><span id="sub-oggi">…</span> · <span id="conn" class="conn">connessione al server…</span></p>
 
-    <div class="stats" id="stats">
-      <div class="stat"><div class="n">…</div><div class="l">…</div></div>
-    </div>
+    <!-- ======================= DASHBOARD ======================= -->
+    <section id="sez-dashboard">
+      <h1>Dashboard</h1>
+      <p class="sub"><span id="sub-oggi">…</span> · <span id="conn" class="conn">connessione al server…</span></p>
 
-    <div class="card">
-      <h2>⏰ In scadenza entro 7 giorni</h2>
-      <div id="tabella-scadenze"><div class="loading">carico i dati…</div></div>
-    </div>
+      <div class="stats" id="stats">
+        <div class="stat"><div class="n">…</div><div class="l">…</div></div>
+      </div>
 
-    <div class="toolbar">
-      <button class="btn" disabled title="Prossima iterazione">+ Nuovo arrivo</button>
-      <button class="btn sec" disabled title="Prossima iterazione">+ Nuova produzione</button>
-    </div>
+      <div class="card">
+        <h2>⏰ In scadenza entro 7 giorni</h2>
+        <div id="tabella-scadenze"><div class="loading">carico i dati…</div></div>
+      </div>
+
+      <div class="toolbar">
+        <button class="btn" id="btn-nuovo-arrivo-dash">+ Nuovo arrivo</button>
+        <button class="btn sec" id="btn-nuova-produzione-dash">+ Nuova produzione</button>
+      </div>
+    </section>
+
+    <!-- ======================== PRODUZIONI ======================== -->
+    <section id="sez-produzioni" hidden>
+      <h1>Produzioni</h1>
+      <p class="sub">Lotti generati in negozio: i consumi sono il verbale, etichetta e giacenze si calcolano da lì.</p>
+
+      <div class="flash" id="flash-produzioni" hidden></div>
+
+      <div class="toolbar filtri">
+        <input id="cerca-produzioni" type="search"
+               placeholder="Cerca prodotto o lotto interno…">
+        <span id="contatore-produzioni" class="muted"></span>
+        <button class="btn" id="btn-nuova-produzione">+ Nuova produzione</button>
+      </div>
+
+      <div class="card">
+        <h2>Lotti interni</h2>
+        <div id="tabella-produzioni"><div class="loading">carico i dati…</div></div>
+      </div>
+
+      <div class="card" id="dettaglio-produzione" hidden>
+        <h2>Dettaglio lotto interno <button class="chiudi" id="chiudi-dettaglio-prod">✕</button></h2>
+        <div id="dettaglio-produzione-testo"><div class="loading">carico i dati…</div></div>
+      </div>
+    </section>
+
+    <!-- ========================= RICETTE ========================= -->
+    <section id="sez-ricette" hidden>
+      <h1>Ricette</h1>
+      <p class="sub">Il master delle produzioni: resa, righe e procedimento. La famiglia del prodotto nasce qui.</p>
+
+      <div class="flash" id="flash-ricette" hidden></div>
+
+      <div class="toolbar filtri">
+        <input id="cerca-ricette" type="search" placeholder="Cerca prodotto…">
+        <span id="contatore-ricette" class="muted"></span>
+        <button class="btn" id="btn-nuova-ricetta">+ Nuova ricetta</button>
+      </div>
+
+      <div class="card">
+        <h2>Ricette master</h2>
+        <div id="tabella-ricette"><div class="loading">carico i dati…</div></div>
+      </div>
+
+      <div class="card" id="dettaglio-ricetta" hidden>
+        <h2>Dettaglio ricetta <button class="chiudi" id="chiudi-dettaglio-ric">✕</button></h2>
+        <div id="dettaglio-ricetta-testo"><div class="loading">carico i dati…</div></div>
+      </div>
+    </section>
+
+    <!-- ======================= ANAGRAFICHE ======================= -->
+    <section id="sez-anagrafiche" hidden>
+      <h1>Anagrafiche</h1>
+      <p class="sub">Fornitori, ingredienti acquistati e prodotti lavorati in negozio: qui i dati nascono una volta sola.</p>
+
+      <div class="flash" id="flash-anagrafiche" hidden></div>
+
+      <div class="card">
+        <div class="card-head"><h2>🛒 Ingredienti <span class="badge b-gray" id="anag-conta-ing"></span></h2>
+          <button class="btn sec" id="anag-nuovo-ing">+ Nuovo</button></div>
+        <input class="anag-cerca" id="cerca-anag-ing" type="search" placeholder="Cerca ingrediente (nome o marca)…" autocomplete="off">
+        <div class="scroll-list anag-alta" id="tabella-anag-ing"><div class="loading">carico i dati…</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>🥣 Prodotti <span class="badge b-gray" id="anag-conta-pro"></span></h2>
+          <button class="btn sec" id="anag-nuovo-pro">+ Nuovo</button></div>
+        <div id="anag-filtro-fam" hidden></div>
+        <input class="anag-cerca" id="cerca-anag-pro" type="search" placeholder="Cerca prodotto…" autocomplete="off">
+        <div class="scroll-list anag-alta" id="tabella-anag-pro"><div class="loading">carico i dati…</div></div>
+        <div class="hint">Il prodotto vive attraverso la sua ricetta (il master): il ➕ crea l'anagrafica e apre subito la ricetta. Qui si vedono solo prodotti con ricetta.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>🚚 Fornitori <span class="badge b-gray" id="anag-conta-for"></span></h2>
+          <button class="btn sec" id="anag-nuovo-for">+ Nuovo</button></div>
+        <input class="anag-cerca" id="cerca-anag-for" type="search" placeholder="Cerca fornitore…" autocomplete="off">
+        <div class="scroll-list anag-bassa" id="tabella-anag-for"><div class="loading">carico i dati…</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>🏷 Famiglie <span class="badge b-gray" id="anag-conta-fam"></span></h2>
+          <button class="btn sec" id="anag-fam-nuovo">+ Nuova</button></div>
+        <div class="anag-fam-riga" id="anag-fam-nuova-riga" hidden>
+          <input id="fam-nuova-nome" type="text" placeholder="Nome della nuova famiglia…" autocomplete="off">
+          <button class="btn" id="fam-nuova-aggiungi">+ Aggiungi</button>
+          <button class="btn sec" id="fam-nuova-annulla">Annulla</button>
+        </div>
+        <div id="anag-fam-errore" class="f-errore" hidden></div>
+        <div class="scroll-list anag-fam" id="tabella-anag-fam"><div class="loading">carico i dati…</div></div>
+        <div class="hint">Le famiglie si usano in ricette e produzioni. Rinominare qui aggiorna ovunque; eliminare è possibile solo se nessun prodotto la usa.</div>
+      </div>
+
+      <div class="card" id="dettaglio-anagrafica" hidden>
+        <h2>Scheda anagrafica <button class="chiudi" id="chiudi-dettaglio-anag">✕</button></h2>
+        <div id="dettaglio-anagrafica-testo"><div class="loading">carico i dati…</div></div>
+      </div>
+    </section>
+
+    <!-- ========================= ARRIVI ========================= -->
+    <section id="sez-arrivi" hidden>
+      <h1>Arrivi</h1>
+      <p class="sub">Lotti in ingresso dai fornitori: la marca nasce qui e il magazzino parte da questi dati.</p>
+
+      <div class="flash" id="flash-arrivi" hidden></div>
+
+      <div class="toolbar filtri">
+        <input id="cerca-arrivi" type="search"
+               placeholder="Cerca prodotto, marca, lotto, fornitore…">
+        <select id="fil-fornitore"><option value="0">Tutti i fornitori</option></select>
+        <select id="fil-ingrediente"><option value="0">Tutti gli ingredienti</option></select>
+        <select id="fil-scadenza">
+          <option value="all">Qualsiasi scadenza</option>
+          <option value="3">In scadenza ≤ 3 giorni</option>
+          <option value="7">In scadenza ≤ 7 giorni</option>
+          <option value="scad">Scaduti</option>
+        </select>
+        <span id="contatore-arrivi" class="muted"></span>
+        <button class="btn" id="btn-nuovo-arrivo">+ Nuovo arrivo</button>
+      </div>
+
+      <div class="card">
+        <h2>Lotti registrati</h2>
+        <div id="tabella-arrivi"><div class="loading">carico i dati…</div></div>
+      </div>
+
+      <div class="card" id="dettaglio-arrivo" hidden>
+        <h2>Dettaglio lotto in ingresso <button class="chiudi" id="chiudi-dettaglio">✕</button></h2>
+        <div id="dettaglio-arrivo-testo"><div class="loading">carico i dati…</div></div>
+      </div>
+    </section>
+
   </main>
 
 </div>
+
+<!-- ===================== NUOVO ARRIVO (modal) ===================== -->
+<div class="overlay" id="overlay-arrivo" hidden>
+  <div class="modal">
+    <h2>Nuovo arrivo</h2>
+    <p class="sub">Il codice lotto è quello stampato sull'etichetta della confezione.</p>
+
+    <div class="f-row">
+      <div class="f-campo">
+        <label for="na-prodotto">Ingrediente <span class="req">*</span></label>
+        <div class="combo">
+          <input id="na-prodotto" type="text" autocomplete="off"
+                 placeholder="Cerca per nome o sigla (es. lat, UOV)…">
+          <div class="combo-dd" id="dd-prod" hidden></div>
+        </div>
+        <input type="hidden" id="na-prodotto-id">
+        <div class="hint" id="hint-prod" hidden></div>
+      </div>
+      <div class="f-campo">
+        <label for="na-fornitore">Fornitore <span class="req">*</span></label>
+        <div class="combo">
+          <input id="na-fornitore" type="text" autocomplete="off"
+                 placeholder="Cerca fornitore…">
+          <div class="combo-dd" id="dd-forn" hidden></div>
+        </div>
+        <input type="hidden" id="na-fornitore-id">
+      </div>
+    </div>
+
+    <!-- Creazione rapida ingrediente (se non è in lista) -->
+    <div class="qc" id="qc-prod" hidden>
+      <div class="qc-tit">➕ Nuovo ingrediente: <input id="qc-prod-nome" class="qc-nome" type="text" placeholder="nome ingrediente">
+        <span class="muted">(poi lo completi in Anagrafiche)</span></div>
+      <div class="f-row">
+        <div class="f-campo">
+          <label for="qc-cons">Conservazione *</label>
+          <select id="qc-cons">
+            <option value="Frigo">🧊 Frigo</option>
+            <option value="Freezer">🧊 Freezer</option>
+            <option value="Magazzino">📦 Magazzino</option>
+          </select>
+        </div>
+        <div class="f-campo">
+          <label for="qc-um">Unità di misura *</label>
+          <input id="qc-um" type="text" placeholder="es. kg">
+        </div>
+        <div class="f-campo">
+          <label for="qc-sigla">Sigla (facoltativa)</label>
+          <input id="qc-sigla" type="text" placeholder="es. PAN">
+        </div>
+      </div>
+      <div class="f-row">
+        <div class="f-campo">
+          <label for="qc-marca">Marca abituale (facoltativa)</label>
+          <input id="qc-marca" type="text">
+        </div>
+        <div class="f-campo">
+          <label for="qc-denom">Denominazione legale (facoltativa)</label>
+          <input id="qc-denom" type="text" placeholder="come sull'etichetta d'acquisto">
+        </div>
+      </div>
+      <div class="f-azioni">
+        <button class="btn sec" id="qc-annulla">Annulla</button>
+        <button class="btn" id="qc-crea">Crea ingrediente</button>
+      </div>
+    </div>
+
+    <!-- Creazione rapida fornitore (se non è in lista) -->
+    <div class="qc" id="qc-forn" hidden>
+      <div class="qc-tit">➕ Nuovo fornitore: <input id="qc-forn-nome" class="qc-nome" type="text" placeholder="nome fornitore">
+        <span class="muted">(poi lo completi in Anagrafiche)</span></div>
+      <div class="f-row">
+        <div class="f-campo">
+          <label for="qc-forn-piva">P. IVA (facoltativa)</label>
+          <input id="qc-forn-piva" type="text">
+        </div>
+      </div>
+      <div class="f-azioni">
+        <button class="btn sec" id="qc-forn-annulla">Annulla</button>
+        <button class="btn" id="qc-forn-crea">Crea fornitore</button>
+      </div>
+    </div>
+
+    <div class="f-row">
+      <div class="f-campo">
+        <label for="na-lotto">Codice lotto</label>
+        <input id="na-lotto" type="text" autocomplete="off" placeholder="es. L2607A">
+      </div>
+      <div class="f-campo">
+        <label for="na-marca">Marca (se diversa dall'abituale)</label>
+        <input id="na-marca" type="text" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="f-row">
+      <div class="f-campo">
+        <label for="na-arrivo">Data arrivo</label>
+        <input id="na-arrivo" type="date">
+      </div>
+      <div class="f-campo">
+        <label for="na-scadenza">Data scadenza</label>
+        <input id="na-scadenza" type="date">
+      </div>
+      <div class="f-campo">
+        <label for="na-quantita">Quantità <span id="na-um" class="um"></span></label>
+        <input id="na-quantita" type="number" step="0.001" min="0">
+      </div>
+    </div>
+
+    <div class="f-row">
+      <div class="f-campo">
+        <label for="na-prezzo">Prezzo unitario € (facoltativo)</label>
+        <input id="na-prezzo" type="number" step="0.01" min="0">
+      </div>
+      <div class="f-campo">
+        <label for="na-iva">IVA % (facoltativa)</label>
+        <input id="na-iva" type="number" step="1" min="0" max="100">
+      </div>
+    </div>
+
+    <div class="f-errore" id="na-errore" hidden></div>
+
+    <div class="f-azioni">
+      <button class="btn sec" id="na-annulla">Annulla</button>
+      <button class="btn" id="na-salva">Salva arrivo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= NUOVA PRODUZIONE (modal, flusso guidato) ================= -->
+<div class="overlay" id="overlay-produzione" hidden>
+  <div class="modal largo">
+    <h2>Nuova produzione</h2>
+    <p class="sub">La ricetta propone i lotti da consumare (FEFO): tu al massimo correggi.</p>
+
+    <div class="steps">
+      <span class="step on">1. Prodotto</span>
+      <span class="step on">2. Lotti usati</span>
+      <span class="step">3. Conferma</span>
+    </div>
+
+    <div class="f-row">
+      <div class="f-campo">
+        <label for="np-prodotto">Prodotto da produrre <span class="req">*</span></label>
+        <div class="combo">
+          <input id="np-prodotto" type="text" autocomplete="off"
+                 placeholder="Cerca prodotto (nome o sigla)…">
+          <div class="combo-dd" id="dd-npprod" hidden></div>
+        </div>
+        <input type="hidden" id="np-prodotto-id">
+        <div class="hint" id="np-hint" hidden></div>
+        <div class="qc" id="qc-npprod" hidden>
+          <div class="qc-tit">➕ Nuovo prodotto da laboratorio: <input id="qc-npprod-nome" class="qc-nome" type="text" placeholder="nome prodotto">
+            <span class="muted">(la famiglia arriverà dalla ricetta)</span></div>
+          <div class="f-row">
+            <div class="f-campo">
+              <label for="qc-nppum">Unità di misura *</label>
+              <input id="qc-nppum" type="text" placeholder="es. kg, pz">
+            </div>
+            <div class="f-campo">
+              <label for="qc-npsigla">Sigla (facoltativa)</label>
+              <input id="qc-npsigla" type="text" placeholder="es. TOR">
+            </div>
+          </div>
+          <div class="f-azioni">
+            <button class="btn sec" id="qc-npprod-annulla">Annulla</button>
+            <button class="btn" id="qc-npprod-crea">Crea prodotto</button>
+          </div>
+        </div>
+      </div>
+      <div class="f-campo">
+        <label for="np-data">Data produzione <span class="req">*</span></label>
+        <input id="np-data" type="date">
+      </div>
+      <div class="f-campo">
+        <label for="np-scadenza">Data scadenza <span class="req">*</span></label>
+        <input id="np-scadenza" type="date">
+      </div>
+      <div class="f-campo">
+        <label for="np-qta">Quantità prodotta <span id="np-um" class="um"></span></label>
+        <input id="np-qta" type="number" step="0.001" min="0">
+      </div>
+    </div>
+
+    <div id="np-ricetta"><div class="loading">scegli il prodotto: la proposta FEFO comparirà qui</div></div>
+
+    <div id="np-errore" class="f-errore" hidden></div>
+
+    <div class="f-azioni">
+      <button class="btn sec" id="np-annulla">Annulla</button>
+      <button class="btn" id="np-salva">Salva produzione</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= NUOVA/MODIFICA RICETTA (modal) ================= -->
+<div class="overlay" id="overlay-ricetta" hidden>
+  <div class="modal largo">
+    <h2 id="nr-titolo">Nuova ricetta</h2>
+    <p class="sub">La ricetta è il master: la produzione la legge e ne fotografa la famiglia.</p>
+
+    <div class="f-row">
+      <div class="f-campo">
+        <label for="nr-prodotto">Prodotto da produrre <span class="req">*</span></label>
+        <div class="combo">
+          <input id="nr-prodotto" type="text" autocomplete="off"
+                 placeholder="Cerca o crea il prodotto (es. Bignè)…">
+          <div class="combo-dd" id="dd-rprod" hidden></div>
+        </div>
+        <input type="hidden" id="nr-prodotto-id">
+        <div class="hint" id="nr-hint" hidden></div>
+        <div class="qc" id="qc-rprod" hidden>
+          <div class="qc-tit">➕ Nuovo prodotto da laboratorio: <input id="qc-rprod-nome" class="qc-nome" type="text" placeholder="nome prodotto">
+            <span class="muted">(la famiglia arriverà dalla ricetta)</span></div>
+          <div class="f-row">
+            <div class="f-campo">
+              <label for="qc-rum">Unità di misura *</label>
+              <input id="qc-rum" type="text" placeholder="es. kg, pz">
+            </div>
+            <div class="f-campo">
+              <label for="qc-rsigla">Sigla (facoltativa)</label>
+              <input id="qc-rsigla" type="text" placeholder="es. TOR">
+            </div>
+          </div>
+          <div class="f-azioni">
+            <button class="btn sec" id="qc-rprod-annulla">Annulla</button>
+            <button class="btn" id="qc-rprod-crea">Crea prodotto</button>
+          </div>
+        </div>
+      </div>
+      <div class="f-campo">
+        <label for="nr-resa">Resa <span id="nr-um" class="um"></span></label>
+        <input id="nr-resa" type="text" placeholder="es. 60 pz" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="f-row">
+      <div class="f-campo">
+        <label for="nr-famiglia">Famiglia <span class="req">*</span></label>
+        <select id="nr-famiglia"><option value="">— scegli —</option></select>
+      </div>
+      <div class="f-campo">
+        <label for="nr-famiglia-nuova">…oppure creane una nuova</label>
+        <input id="nr-famiglia-nuova" type="text" placeholder="es. Torte, Gelati…" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="f-campo">
+      <label for="nr-procedimento">Procedimento (facoltativo)</label>
+      <textarea id="nr-procedimento" rows="3"></textarea>
+    </div>
+
+    <div class="f-campo">
+      <label>Ingredienti <span class="req">*</span></label>
+      <div id="nr-righe"><div class="loading">aggiungi la prima riga…</div></div>
+    </div>
+
+    <div id="nr-errore" class="f-errore" hidden></div>
+
+    <div class="f-azioni">
+      <button class="btn sec" id="nr-annulla">Annulla</button>
+      <button class="btn" id="nr-salva">Salva ricetta</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= NUOVO INGREDIENTE (anagrafiche) ================= -->
+<div class="overlay" id="overlay-anag-ing" hidden>
+  <div class="modal">
+    <h2>Nuovo ingrediente</h2>
+    <p class="sub">I dati dell'anagrafica nascono qui: negli arrivi non si richiedono più.</p>
+    <div class="f-row">
+      <div class="f-campo">
+        <label for="nai-nome">Nome <span class="req">*</span></label>
+        <input id="nai-nome" type="text" placeholder="es. Farina 00" autocomplete="off">
+      </div>
+      <div class="f-campo">
+        <label for="nai-denom">Denominazione legale <span class="req">*</span></label>
+        <input id="nai-denom" type="text" placeholder="come sull'etichetta d'acquisto" autocomplete="off">
+        <div class="hint">La dicitura dell'etichetta d'acquisto: finisce nell'etichetta dei prodotti finiti (es. farina 00 → «Farina di grano tenero tipo 00»).</div>
+      </div>
+    </div>
+    <div class="f-row">
+      <div class="f-campo">
+        <label for="nai-cons">Conservazione <span class="req">*</span></label>
+        <select id="nai-cons">
+          <option value="Frigo">🧊 Frigo</option>
+          <option value="Freezer">❄️ Freezer</option>
+          <option value="Magazzino">📦 Magazzino</option>
+        </select>
+      </div>
+      <div class="f-campo">
+        <label for="nai-um">Unità di misura <span class="req">*</span></label>
+        <input id="nai-um" type="text" placeholder="es. kg, lt">
+      </div>
+      <div class="f-campo">
+        <label for="nai-sigla">Sigla (facoltativa)</label>
+        <input id="nai-sigla" type="text" placeholder="es. FAR">
+      </div>
+      <div class="f-campo">
+        <label for="nai-marca">Marca abituale (facoltativa)</label>
+        <input id="nai-marca" type="text" placeholder="default degli arrivi">
+      </div>
+    </div>
+    <div class="f-campo">
+      <label>Allergeni <span class="muted">(clic per attivare/disattivare)</span></label>
+      <div id="nai-chips" class="chips"></div>
+      <div class="hint">I 14 allergeni obbligatori da etichetta (Reg. UE 1169/2011). I prodotti di laboratorio li ereditano dalla ricetta.</div>
+    </div>
+    <div class="f-campo">
+      <label for="nai-note">Note (facoltative)</label>
+      <input id="nai-note" type="text">
+    </div>
+    <div id="nai-errore" class="f-errore" hidden></div>
+    <div class="f-azioni">
+      <button class="btn sec" id="nai-annulla">Annulla</button>
+      <button class="btn" id="nai-salva">Crea ingrediente</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= NUOVO FORNITORE (anagrafiche) ================= -->
+<div class="overlay" id="overlay-anag-for" hidden>
+  <div class="modal">
+    <h2>Nuovo fornitore</h2>
+    <p class="sub">I contatti nascono qui: nell'arrivo si sceglie soltanto.</p>
+    <div class="f-row">
+      <div class="f-campo">
+        <label for="naf-nome">Ragione sociale <span class="req">*</span></label>
+        <input id="naf-nome" type="text" placeholder="es. Caseificio Valle" autocomplete="off">
+      </div>
+      <div class="f-campo">
+        <label for="naf-piva">Partita IVA (facoltativa)</label>
+        <input id="naf-piva" type="text" class="mono">
+      </div>
+    </div>
+    <div class="f-row">
+      <div class="f-campo">
+        <label for="naf-tel">Telefono (facoltativo)</label>
+        <input id="naf-tel" type="text">
+      </div>
+      <div class="f-campo">
+        <label for="naf-email">Email (facoltativa)</label>
+        <input id="naf-email" type="text">
+      </div>
+    </div>
+    <div class="f-campo">
+      <label for="naf-note">Note (facoltative)</label>
+      <input id="naf-note" type="text">
+    </div>
+    <div id="naf-errore" class="f-errore" hidden></div>
+    <div class="f-azioni">
+      <button class="btn sec" id="naf-annulla">Annulla</button>
+      <button class="btn" id="naf-salva">Crea fornitore</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= NUOVO PRODOTTO LAB (anagrafiche) ================= -->
+<div class="overlay" id="overlay-anag-pro" hidden>
+  <div class="modal">
+    <h2>Nuovo prodotto di laboratorio</h2>
+    <p class="sub">L'anagrafica nasce qui e la ricetta subito dopo: il prodotto esiste attraverso la sua ricetta (il master).</p>
+    <div class="f-row">
+      <div class="f-campo">
+        <label for="nap-nome">Nome <span class="req">*</span></label>
+        <input id="nap-nome" type="text" placeholder="es. Bignè" autocomplete="off">
+      </div>
+      <div class="f-campo">
+        <label for="nap-um">Unità di misura <span class="req">*</span></label>
+        <input id="nap-um" type="text" placeholder="es. kg, pz">
+      </div>
+      <div class="f-campo">
+        <label for="nap-sigla">Sigla (facoltativa)</label>
+        <input id="nap-sigla" type="text" placeholder="per il codice lotto, es. BGN">
+      </div>
+    </div>
+    <div id="nap-errore" class="f-errore" hidden></div>
+    <div class="f-azioni">
+      <button class="btn sec" id="nap-annulla">Annulla</button>
+      <button class="btn" id="nap-salva">Crea e apri la ricetta</button>
+    </div>
+  </div>
+</div>
+
 <script src="/static/app.js"></script>
 </body>
 </html>

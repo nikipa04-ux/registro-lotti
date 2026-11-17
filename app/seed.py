@@ -94,6 +94,20 @@ def seed(conn):
             "INSERT INTO ricette_righe (ricetta_id, ingrediente_id, quantita) "
             "VALUES (?, ?, ?)", (ric_crema, ing_id[nome], qta))
 
+    # Ricetta del bignè: crema 3 kg + uova dirette 0.5 (fusione in etichetta)
+    ric_bigne = conn.execute(
+        "INSERT INTO ricette (prodotto_id, famiglia_id, resa, procedimento) "
+        "VALUES (?, ?, '60 pz', 'Portare acqua, burro e sale a bollore, gettare "
+        "la farina e asciugare sul fuoco mescolando. Fuori dal fuoco unire "
+        "le uova poco per volta. Farcire con la crema solo a servizio.')",
+        (bigne, dol)).lastrowid
+    conn.execute(
+        "INSERT INTO ricette_righe (ricetta_id, ingrediente_id, quantita) "
+        "VALUES (?, ?, ?)", (ric_bigne, crema, 3))
+    conn.execute(
+        "INSERT INTO ricette_righe (ricetta_id, ingrediente_id, quantita) "
+        "VALUES (?, ?, ?)", (ric_bigne, ing_id["Uova pastorizzate liquide"], 0.5))
+
     # ---- Arrivi (date relative: la dashboard mostra scadenze vere) ----
     # (ingrediente, fornitore, lotto, giorni_arrivo, giorni_scadenza, qta, prezzo, iva)
     arrivi = [
@@ -115,11 +129,12 @@ def seed(conn):
         arr_id[i] = cur.lastrowid
 
     # ---- Produzioni (slave): crema ieri, bignè oggi ----
-    def produzione(prodotto, sigla_padre, giorni, giorni_scadenza, qta_prodotta, consumi):
+    def produzione(prodotto, sigla_padre, famiglia, giorni, giorni_scadenza, qta_prodotta, consumi):
+        # famiglia SNAPSHOT dalla ricetta, come fa registra_produzione
         cur = conn.execute(
-            "INSERT INTO lotti_interni (prodotto_id, qta_prodotta, codice_lotto, "
-            "data_produzione, data_scadenza) VALUES (?, ?, ?, ?, ?)",
-            (prodotto, qta_prodotta, genera_codice(
+            "INSERT INTO lotti_interni (prodotto_id, famiglia_id, qta_prodotta, codice_lotto, "
+            "data_produzione, data_scadenza) VALUES (?, ?, ?, ?, ?, ?)",
+            (prodotto, famiglia, qta_prodotta, genera_codice(
                 conn, {"nome": "", "sigla": sigla_padre}, _g(giorni)),
              _g(giorni), _g(giorni_scadenza)))
         lid = cur.lastrowid
@@ -130,11 +145,11 @@ def seed(conn):
         return lid
 
     # Crema: latte 4 (lotti in ingresso 1), uova 2 (lotto 2), zucchero 1.5 (lotto 3)
-    crema_lotto = produzione(crema, "CRP", -1, 2, 5, [
+    crema_lotto = produzione(crema, "CRP", crp, -1, 2, 5, [
         ("ingresso", arr_id[1], 4), ("ingresso", arr_id[2], 2), ("ingresso", arr_id[3], 1.5)])
 
     # Bignè: crema 3 kg + uova dirette 0.5 (dimostra la fusione in etichetta)
-    produzione(bigne, "BIG", 0, 3, 60, [
+    produzione(bigne, "BIG", dol, 0, 3, 60, [
         ("interno", crema_lotto, 3), ("ingresso", arr_id[2], 0.5)])
 
 
