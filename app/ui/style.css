@@ -86,6 +86,32 @@ td.empty { color: var(--muted); text-align: center; }
 .filtri .muted { margin-left: auto; white-space: nowrap; }
 th.num, td.num { text-align: right; }
 #tabella-arrivi { overflow-x: auto; }
+/* Card "Lotti registrati": un quinto (20%) più larga della colonna
+   contenuti, si allunga sullo spazio libero a destra (stessa idea del
+   pannello anagrafica laterale). Il max-width di sicurezza evita di
+   sforare la finestra quando lo schermo è stretto. */
+.card-larga { width: 120%; max-width: calc(100vw - 270px); }
+/* Nella card "Lotti registrati" il 20% extra di larghezza va alle colonne
+   dal Lotto in poi: Prodotto e Marca restano compatte, tutte le altre
+   respirano di più (padding orizzontale raddoppiato). */
+.card-larga th:nth-child(n+3),
+.card-larga td:nth-child(n+3) { padding-left: 20px; padding-right: 20px; }
+/* Colonne "Totale" e "Totale + IVA" (9ª e 11ª) ancora più larghe:
+   sono i due totali di riga, il resto extra va a loro. */
+.card-larga th:nth-child(9), .card-larga td:nth-child(9),
+.card-larga th:nth-child(11), .card-larga td:nth-child(11) {
+  padding-left: 32px; padding-right: 32px;
+}
+/* Mai a capo nelle celle numeriche, nella Q.tà e nella data di Arrivo:
+   cifra, simbolo (€ o u.m.) e data ISO restano su una riga sola
+   (nbsp in eur() e nella riga Q.tà + nowrap qui, la data ISO ha i
+   trattini che il browser spezza); se manca spazio scrolla la tabella
+   in orizzontale, non spezza il numero. */
+.card-larga td.num, .card-larga th.num,
+.card-larga th:nth-child(5), .card-larga td:nth-child(5),
+.card-larga th:nth-child(7), .card-larga td:nth-child(7) {
+  white-space: nowrap;
+}
 
 /* Combobox con typeahead e creazione rapida (come la demo) */
 .combo { position: relative; }
@@ -137,7 +163,9 @@ th.num, td.num { text-align: right; }
   display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
 .overlay[hidden] { display: none; }
 .modal { background: var(--card); border-radius: 12px; padding: 20px 22px;
-  width: 560px; max-width: 100%; max-height: calc(100vh - 40px); overflow: auto; }
+  width: 720px; max-width: 100%; max-height: calc(100vh - 40px); overflow: auto;
+  display: flex; flex-direction: column;
+  min-height: min(620px, calc(100vh - 40px)); }
 .modal h2 { font-size: 16px; margin: 0 0 2px; color: var(--ink);
   text-transform: none; letter-spacing: 0; }
 .modal .sub { margin-bottom: 14px; }
@@ -153,6 +181,9 @@ th.num, td.num { text-align: right; }
 .f-errore { background: var(--red-bg); color: var(--red); border: 1px solid #fecaca;
   padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
 .f-azioni { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+/* Finestre d'aggiunta alte: se il contenuto è corto, le azioni
+   (Salva/Annulla) restano comunque appiccicate in fondo alla modale. */
+.modal > .f-azioni { margin-top: auto; padding-top: 16px; }
 
 
 /* ---- Produzioni ---- */
@@ -160,7 +191,7 @@ th.num, td.num { text-align: right; }
 .btn.sec.mini.rosso { color: var(--red); border-color: #fecaca; }
 .btn.sec.mini.rosso:hover { background: var(--red-bg); }
 
-.modal.largo { width: 680px; }
+.modal.largo { width: 880px; min-height: min(740px, calc(100vh - 40px)); }
 
 .steps { display: flex; gap: 8px; margin: 4px 0 14px; }
 .step { font-size: 11px; color: var(--muted); background: #f1f5f9;
@@ -183,6 +214,18 @@ th.num, td.num { text-align: right; }
 .chips .warn-chip, .chips .muted { align-self: center; }
 .warn { background: var(--red-bg); color: var(--red); border: 1px solid #fecaca;
   padding: 10px 12px; border-radius: 8px; margin: 8px 0; font-size: 13px; }
+
+/* ⚖ Assegna lotti: l'eccezione a mano alla proposta FEFO */
+.assegna-pannello { margin-top: 8px; padding: 10px 12px; border: 1px dashed var(--brand);
+  border-radius: 8px; background: var(--card); }
+.assegna-riga { display: flex; align-items: center; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
+.assegna-riga .qta-input { width: 90px; }
+/* ➕ registra al volo il lotto non in elenco (nasce un vero arrivo) */
+.assegna-registra { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.assegna-registra input { padding: 8px 10px; font-size: 13px; border: 1px solid var(--line);
+  border-radius: 8px; background: #fff; color: var(--ink); }
+.assegna-registra input:focus { outline: 2px solid var(--brand); border-color: var(--brand); }
+.assegna-registra .combo { flex: 1; min-width: 220px; }
 
 .sel-aggiunta { flex: 1; min-width: 200px; padding: 8px 10px; font-size: 14px;
   border: 1px solid var(--amber); border-radius: 8px; background: #fff; color: var(--ink); }
@@ -213,13 +256,35 @@ ol.etichetta li { margin-bottom: 3px; }
 .scroll-list table { margin: 0; }
 .scroll-list tr[data-id], .scroll-list tr[data-forn] { cursor: pointer; }
 
-/* La scheda di dettaglio non si allunga all'infinito: il contenuto scrolla
+/* Le schede di dettaglio non si allungano all'infinito: il contenuto scrolla
    dentro la card, l'intestazione resta fissa e le azioni (Salva/Elimina)
-   restano sempre visibili appiccicate in fondo. */
-#dettaglio-anagrafica-testo { max-height: 70vh; overflow-y: auto; }
-#dettaglio-anagrafica-testo .f-azioni:last-child {
+   restano sempre visibili appiccicate in fondo. Vale per anagrafiche,
+   dettaglio arrivi e dettaglio produzioni. */
+#dettaglio-anagrafica-testo,
+#dettaglio-arrivo-testo,
+#dettaglio-produzione-testo { max-height: 70vh; overflow-y: auto; }
+#dettaglio-anagrafica-testo .f-azioni:last-child,
+#dettaglio-arrivo-testo .f-azioni:last-child,
+#dettaglio-produzione-testo .f-azioni:last-child {
   position: sticky; bottom: 0; background: var(--card);
   padding: 10px 0 2px; margin-bottom: 0;
+}
+
+/* Scheda anagrafica come PANNELLO LATERALE DESTRO: sui monitor larghi la
+   colonna dei contenuti (nav 220 + max 1000px) arriva a x=1220 e a destra
+   resta spazio vuoto: lì si apre la scheda, ANCORATA alle card
+   (bordo sinistro fisso a 24px dalla colonna contenuti) e larga tutto lo
+   spazio disponibile fino a un massimo di 720px.
+   Su schermi stretti (< 1400px) resta il comportamento classico:
+   la scheda si apre sotto le card. */
+@media (min-width: 1400px) {
+  #dettaglio-anagrafica {
+    position: fixed; top: 16px; bottom: 16px; left: 1244px; right: 16px;
+    max-width: 720px; margin: 0; overflow-y: auto; z-index: 40;
+    box-shadow: 0 10px 32px rgba(15, 23, 42, 0.14);
+  }
+  /* il pannello scrolla tutto intero: niente doppio scroll interno */
+  #dettaglio-anagrafica-testo { max-height: none; overflow: visible; }
 }
 .chip-allergene { cursor: pointer; user-select: none; }
 .chip-allergene:hover { opacity: 0.8; }

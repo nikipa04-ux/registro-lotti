@@ -1,8 +1,6 @@
 """Ricette: il MASTER delle produzioni. Lista, dettaglio, salvataggio.
 
 Le regole vivono in app/logic/ricette.py; qui si ricevono le richieste.
-Route /candidati dichiarata PRIMA di /{prodotto_id} (FastAPI fa match dei
-path param per ordine di dichiarazione).
 """
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -10,7 +8,6 @@ from pydantic import BaseModel
 from ..db import connessione
 from ..logic.ricette import (
     ErroreRicetta,
-    candidati,
     dettaglio_ricetta,
     elimina_ricetta,
     lista_ricette,
@@ -27,13 +24,6 @@ def lista(testo: str = ""):
         return lista_ricette(conn, testo)
 
 
-@router.get("/candidati")
-def prodotti_candidati():
-    """Prodotti a cui si può dare una ricetta (senza una e senza arrivi)."""
-    with connessione() as conn:
-        return candidati(conn)
-
-
 @router.get("/{prodotto_id}")
 def dettaglio(prodotto_id: int):
     """La ricetta di un prodotto, con le righe complete."""
@@ -46,7 +36,9 @@ def dettaglio(prodotto_id: int):
 
 class NuovoProdottoLab(BaseModel):
     nome: str
-    unita_misura: str
+    # l'u.m. non serve più al prodotto di laboratorio: la resa della
+    # ricetta è già autosufficiente ('5 kg'). Campi per compatibilità.
+    unita_misura: str | None = None
     sigla: str | None = None
     conservazione: str | None = None
 

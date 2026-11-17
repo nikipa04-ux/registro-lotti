@@ -22,7 +22,7 @@ def lista_ricette(conn, testo=""):
     return [
         dict(r) for r in conn.execute(
             "SELECT r.id AS ricetta_id, r.prodotto_id, p.nome AS prodotto, "
-            "p.unita_misura AS um, f.nome AS famiglia, r.resa, r.procedimento, "
+            "p.sigla, p.unita_misura AS um, f.nome AS famiglia, r.resa, r.procedimento, "
             "(SELECT COUNT(*) FROM ricette_righe rr WHERE rr.ricetta_id = r.id) AS n_righe "
             "FROM ricette r "
             "JOIN prodotti p ON p.id = r.prodotto_id "
@@ -30,24 +30,6 @@ def lista_ricette(conn, testo=""):
             "WHERE ? = '' OR LOWER(p.nome) LIKE ? "
             "ORDER BY p.nome",
             (testo, q),
-        ).fetchall()
-    ]
-
-
-def candidati(conn):
-    """Prodotti a cui SI PUÒ dare una ricetta (nuova): quelli che non ne
-    hanno una e non hanno lotti in ingresso (chi arriva dal fornitore non
-    si produce in negozio)."""
-    return [
-        dict(r) for r in conn.execute(
-            "SELECT p.id, p.nome, p.sigla, p.unita_misura, p.famiglia_id, "
-            "f.nome AS famiglia "
-            "FROM prodotti p "
-            "LEFT JOIN famiglie f ON f.id = p.famiglia_id "
-            "WHERE NOT EXISTS (SELECT 1 FROM ricette r WHERE r.prodotto_id = p.id) "
-            "AND NOT EXISTS (SELECT 1 FROM lotti_ingresso li "
-            "                WHERE li.prodotto_id = p.id) "
-            "ORDER BY p.nome"
         ).fetchall()
     ]
 
@@ -94,11 +76,11 @@ def crea_prodotto_lab(conn, dati):
     (non è un ingrediente acquistato).
     """
     nome = (dati.get("nome") or "").strip()
-    um = (dati.get("unita_misura") or "").strip()
+    # L'u.m. del prodotto di laboratorio NON serve più: la resa della
+    # ricetta ('5 kg') è già autosufficiente. Se arriva, la si tiene.
+    um = (dati.get("unita_misura") or "").strip() or None
     if not nome:
         raise ErroreRicetta("Il nome del prodotto è obbligatorio")
-    if not um:
-        raise ErroreRicetta("Unità di misura obbligatoria (es. kg, pz)")
     gia = conn.execute(
         "SELECT id FROM prodotti WHERE LOWER(nome) = LOWER(?)", (nome,)
     ).fetchone()

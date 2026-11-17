@@ -72,6 +72,10 @@ tramite python.exe (firmato) il problema non si pone mai.
 python -m pytest
 ```
 
+Comprende due guardie statiche: nessun modulo API può oscurare un
+import (`test_api_static`) e l'interfaccia non può avere funzioni JS
+definite ma mai usate né ID HTML dimenticati (`test_ui_static`).
+
 ## Dati di prova (seed)
 
 Per vedere il gestionale vivo da subito, senza inserire nulla a mano:
@@ -82,12 +86,24 @@ python -m app.seed
 ```
 
 Carica lo scenario del pasticciere: 3 fornitori, 6 ingredienti (con allergeni,
+e **tutti i 14 allergeni di legge** in tabella: il server li assicura a ogni
+avvio anche sui database esistenti, `app/logic/anagrafiche.py` →
+`ALLERGENI_DI_LEGGE` / `garantisci_allergeni_di_legge`, Reg. UE 1169/2011),
 conservazione e denominazioni legali), le ricette di crema e bignè, 6 arrivi e
 2 produzioni collegate dai consumi. Le date sono calcolate rispetto a oggi,
 quindi la dashboard mostra subito scadenze vere (panna critica, latte in
 scadenza, ecc.). Per ricaricare la demo da zero: `python -m app.seed --reset`.
 
 ## Interfaccia
+
+Comportamenti comuni a tutte le sezioni:
+
+- le finestre modali si chiudono con **Escape**, col bottone Annulla o
+  clicando fuori (sullo sfondo scuro);
+- le schede di dettaglio (anagrafiche, arrivi, produzioni) non si
+  allungano all'infinito: il contenuto scrolla DENTRO la card
+  (intestazione fissa, bottoni sempre visibili in fondo);
+- le liste lunghe scrollano dentro la propria card.
 
 ### Dashboard
 
@@ -109,11 +125,13 @@ La sezione con cui si registra tutto ciò che entra:
   prezzo unitario, totale e totale+IVA (CALCOLATI dal server)
 - **Dettaglio lotto**: clic su una riga → dati del lotto, costi e
   tracciabilità avanti ("usato in": quali produzioni l'hanno consumato),
-  più bottone "🗑 Elimina" con conferma
+  più bottone "🗑 Elimina" con conferma; il contenuto scrolla DENTRO la
+  card (intestazione fissa, azioni sempre visibili)
 - **Nuovo arrivo** (modale): ingrediente e fornitore sono combobox con
   typeahead (tendina raggruppata per conservazione 🧊); se il nome cercato
   non esiste compare "➕ Crea..." che apre la creazione rapida: l'ingrediente
-  nasce lì (conservazione, u.m., sigla, marca, denominazione legale) e resta
+  nasce lì (conservazione, u.m., sigla, marca, denominazione legale e
+  allergeni a chip, già selezionabili) e resta
   selezionato. Date, quantità, prezzo e IVA facoltativi.
 
 Le regole di registrazione vivono nel server (`app/logic/arrivi.py`):
@@ -147,6 +165,9 @@ della ricetta, l'operatore al massimo corregge.
   ("deriva da": i lotti consumati con le quantità) e AVANTI ("usato in"),
   etichetta ingredienti CALCOLATA dal verbale (denominazioni in ordine di
   peso, senza quantità) + "Contiene (allergeni):" dichiarazione degli allergeni
+  + bottone "🗑 Elimina" (annulla il verbale e ripristina le giacenze);
+  il contenuto scrolla DENTRO la card (intestazione fissa, azioni sempre
+  visibili)
 - **Nuova produzione** (modale a passi 1-2-3):
   1. prodotto da produrre (solo prodotti di laboratorio CON ricetta) →
      carica la proposta. Il combobox segue la regola del ➕: si può CREARE
@@ -157,7 +178,17 @@ della ricetta, l'operatore al massimo corregge.
   2. la proposta FEFO: una riga per ingrediente di ricetta con i chip dei
      lotti proposti (stesso ordine FEFO del server, quantità modificabile,
      riga escludibile ✕/↩), righe aggiungibili fuori ricetta (ingredienti
-     acquistati e prodotti di laboratorio), alert rosso se manca merce
+     acquistati e prodotti di laboratorio), alert rosso se manca merce;
+     il bottone **⚖ Assegna lotti** per riga apre un pannello dove l'operatore
+     decide a mano quanto prendere da ogni lotto (somma = quantità della
+     riga, giacenze rispettate): la realtà del laboratorio non è mai FEFO
+     perfetta. I chip scelti a mano sono marcati "a mano", e "↩ Riallinea
+     a FEFO" torna alla proposta automatica. Se il lotto realmente usato
+     non è ancora registrato, il ➕ in fondo al pannello lo crea al volo:
+     nasce un VERO arrivo (fornitore, quantità, scadenza; arrivo di oggi,
+     marca e prezzi si completano in Arrivi), entra nella riga e la FEFO
+     copre il resto: la tracciabilità resta intatta, il verbale scarica
+     un lotto che esiste davvero
   3. date e quantità prodotta (default = resa della ricetta) → salva
 
 Al salvataggio il server RIVALIDA tutto (`app/logic/produzioni.py`):
@@ -179,9 +210,9 @@ giacenze dei lotti in ingresso consumati (le giacenze si scrivono solo in
 registrazione, quindi si ripristinano solo qui).
 
 v0.1: i lotti interni consumati (prodotti di laboratorio) non tracciano
-la residua: la loro disponibilità è la quantità prodotta. Il cambio manuale
-dei lotti proposti ("cambia lotti" della demo) è in backlog: la UI mostra
-la proposta FEFO e l'operatore corregge quantità, esclusioni e aggiunte.
+la residua: la loro disponibilità è la quantità prodotta. La scelta
+manuale dei lotti ("⚖ Assegna lotti", ex backlog) c'è: il server
+rivalida comunque giacenze e quantità al salvataggio.
 
 ### Ricette
 
@@ -193,14 +224,18 @@ la ricetta ora si crea e si corregge dall'interfaccia.
   badge, resa, numero ingredienti, presenza del procedimento), riga
   cliccabile → dettaglio con righe complete (con badge famiglia
   dell'ingrediente), resa, sigla del lotto e procedimento
-- **Nuova ricetta** (modale): prodotto = combobox typeahead sui SOLI
-  candidati (senza ricetta e senza lotti in ingresso: chi arriva dal
-  fornitore non si produce) con creazione rapida "➕ Crea" (u.m. + sigla;
-  la famiglia arriverà dalla ricetta); famiglia = select di quelle
-  esistenti OPPURE nome nuovo (la famiglia nasce qui: l'utente ne crea
-  quante ne vuole); resa testuale (es. "60 pz"), procedimento facoltativo,
-  righe ingrediente+quantità (ingredienti acquistati e prodotti di
-  laboratorio, come le aggiunte delle produzioni)
+- **Nuova ricetta** (modale): prodotto = combobox typeahead su tutta
+  l'anagrafica esistente in quel momento (nessun suggerimento automatico
+  e nessuna lista speciale: se non c'è, lo si crea con "➕ Crea", nome +
+  sigla; se quello scelto ha già una ricetta la modale si apre in
+  modifica); famiglia = combobox con tendina
+  delle esistenti e creazione rapida "➕ Crea" (la famiglia nasce qui:
+  l'utente ne crea quante ne vuole e la ritrova subito nella card
+  Anagrafiche → Famiglie); resa divisa in due campi, quantità (numero) + unità
+  di misura (es. "60" + "pz"; in banca dati resta il testo combinato
+  "60 pz", pronto per il futuro calcolatore dinamico), procedimento
+  facoltativo, righe ingrediente+quantità (ingredienti acquistati e
+  prodotti di laboratorio, come le aggiunte delle produzioni)
 - **Modifica**: stessa modale prefilled; le righe RIMPIAZZANO le vecchie
   (la ricetta è il master), le produzioni passate restano con il loro
   snapshot
@@ -231,24 +266,28 @@ ricetta (qui NON si tocca, al massimo la si apre).
     marca
   - **🥣 Prodotti**: SOLO prodotti con ricetta (gerarchia stretta: il
     prodotto esiste attraverso la sua ricetta, che è il master). Bottone
-    **➕ Nuovo**: la modale crea l'anagrafica (nome, u.m., sigla) e apre
+    **➕ Nuovo**: la modale crea l'anagrafica (nome, sigla) e apre
     SUBITO la ricetta; salvando, il prodotto compare in card. Famiglia in
     badge, allergeni EREDITATI dalla ricetta (calcolati, mai scritti a
-    mano), u.m., sigla, n. produzioni; filtro per famiglia (badge
+    mano), sigla, n. produzioni; filtro per famiglia (badge
     cliccabile, rimovibile con ✕)
   - **🚚 Fornitori**: nome + P.IVA, n. arrivi
   - **🏷 Famiglie**: creazione inline, **rinomina inline ✏️ che si
     propaga ovunque** (tutto JOINa per id), conteggio prodotti cliccabile
     (filtra la card Prodotti), eliminazione solo se non usata
-- **Scheda di dettaglio** (pannello in-page, clic su una riga): il
-  contenuto scrolla DENTRO la scheda (max-height, intestazione fissa) e
-  le azioni Salva/Elimina restano sempre visibili in fondo:
+- **Scheda di dettaglio** (clic su una riga): sui monitor larghi
+  (≥ 1400px) si apre come **pannello laterale ancorato accanto alle
+  card**, sul lato destro dello schermo, sempre visibile mentre si
+  scorrono le liste; su schermi
+  stretti si apre sotto le card. In entrambi i casi il contenuto scrolla
+  DENTRO la scheda (max-height, intestazione fissa) e le azioni
+  Salva/Elimina restano sempre visibili in fondo:
   - *ingrediente*: nome, denominazione legale* (per l'etichetta dei
     prodotti finiti), marca abituale (default degli arrivi),
     conservazione*, i 14 allergeni come chips on/off (Reg. UE 1169/2011),
     u.m., sigla, note + arrivi recenti cliccabili (saltano al dettaglio
     del lotto, sezione Arrivi)
-  - *prodotto di laboratorio*: nome, u.m., sigla, note; famiglia e
+  - *prodotto di laboratorio*: nome, sigla, note; famiglia e
     allergeni READ-ONLY ereditati dalla ricetta ("se cambia la ricetta,
     cambiano qui") + bottoni **✏️ Modifica la ricetta / ➕ Crea la
     ricetta** (la modale ricetta si apre sopra la scheda e al salvataggio

@@ -12,6 +12,52 @@ Regole di design (fisse):
 
 CONSERVAZIONI = ("Frigo", "Freezer", "Magazzino")
 
+# I 14 allergeni obbligatori da etichetta (Reg. UE 1169/2011, Allegato II):
+# dati DI LEGGE, non demo. Ci sono sempre, in ogni database, anche in quelli
+# nati col vecchio seed a 4 allergeni: garantisci_allergeni_di_legge li
+# assicura a ogni avvio del server.
+ALLERGENI_DI_LEGGE = [
+    ("Cereali con glutine",
+     "Grano, segale, orzo, avena, farro, kamut e ceppi ibridati, e derivati"),
+    ("Crostacei", "Crostacei e prodotti a base di crostacei"),
+    ("Uova", "Uova e prodotti a base di uova"),
+    ("Pesce", "Pesce e prodotti a base di pesce"),
+    ("Arachidi", "Arachidi e prodotti a base di arachidi"),
+    ("Soia", "Soia e prodotti a base di soia"),
+    ("Latte", "Latte e prodotti a base di latte"),
+    ("Frutta a guscio",
+     "Mandorle, nocciole, noci, noci pecan, noci del Brasile, pistacchi, "
+     "noci macadamia, e derivati"),
+    ("Sedano", "Sedano e prodotti a base di sedano"),
+    ("Senape", "Senape e prodotti a base di senape"),
+    ("Sesamo", "Semi di sesamo e prodotti a base di semi di sesamo"),
+    ("Solfiti",
+     "Solfiti e anidride solforosa in concentrazioni > 10 mg/kg o 10 mg/l"),
+    ("Lupini", "Lupini e prodotti a base di lupini"),
+    ("Molluschi", "Molluschi e prodotti a base di molluschi"),
+]
+
+
+def garantisci_allergeni_di_legge(conn):
+    """Assicura a ogni avvio i 14 allergeni (Reg. UE 1169/2011): chi manca
+    si aggiunge, chi c'è già resta con il suo id (i collegamenti
+    prodotti_allergeni non si toccano); la descrizione legale si aggiorna."""
+    for nome, descrizione in ALLERGENI_DI_LEGGE:
+        gia = conn.execute(
+            "SELECT id FROM allergeni WHERE nome = ?", (nome,)
+        ).fetchone()
+        if gia:
+            conn.execute(
+                "UPDATE allergeni SET descrizione = ? WHERE id = ?",
+                (descrizione, gia["id"]),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO allergeni (nome, descrizione) VALUES (?, ?)",
+                (nome, descrizione),
+            )
+    conn.commit()
+
 
 class ErroreAnagrafica(ValueError):
     pass
@@ -265,11 +311,11 @@ def salva_prodotto(conn, dati):
     if not nome:
         raise ErroreAnagrafica("Il nome è obbligatorio")
     um = (dati.get("unita_misura") or "").strip()
-    if not um:
-        raise ErroreAnagrafica("Unità di misura obbligatoria (es. kg)")
     sigla = (dati.get("sigla") or "").strip().upper() or None
     note = (dati.get("note") or "").strip() or None
     if tipo == "ingrediente":
+        if not um:
+            raise ErroreAnagrafica("Unità di misura obbligatoria (es. kg)")
         conservazione = (dati.get("conservazione") or "").strip()
         if conservazione not in CONSERVAZIONI:
             raise ErroreAnagrafica("Conservazione: Frigo, Freezer o Magazzino")
@@ -301,7 +347,10 @@ def salva_prodotto(conn, dati):
                 "li ereditano dalla ricetta"
             )
         # i dati del laboratorio non si scrivono qui (marca, conservazione,
-        # denominazione restano quelli dell'ingrediente/ricetta)
+        # denominazione restano quelli dell'ingrediente/ricetta).
+        # L'u.m. del prodotto NON serve più: se non arriva resta quella
+        # storica (non si buttano via i dati vecchi, si smette di chiederla).
+        um = um or p["unita_misura"]
         conn.execute(
             "UPDATE prodotti SET nome = ?, unita_misura = ?, sigla = ?, note = ? "
             "WHERE id = ?",

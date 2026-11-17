@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import db
 from .api import anagrafiche, arrivi, dashboard, magazzino, produzioni, ricette
+from .logic.anagrafiche import garantisci_allergeni_di_legge
 
 app = FastAPI(
     title="Registro Lotti",
@@ -29,7 +30,10 @@ app.include_router(dashboard.router)
 
 @app.on_event("startup")
 def avvio():
-    db.inizializza()
+    conn = db.inizializza()
+    # i 14 allergeni di legge (Reg. UE 1169/2011) sono dati di riferimento:
+    # assicurati a ogni avvio, anche sui DB nati col vecchio seed demo a 4
+    garantisci_allergeni_di_legge(conn)
 
 
 @app.get("/api/health")

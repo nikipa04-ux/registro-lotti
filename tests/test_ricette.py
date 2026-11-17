@@ -4,7 +4,6 @@ from app import db
 from app.logic.produzioni import ErroreProduzione, proponi_produzione
 from app.logic.ricette import (
     ErroreRicetta,
-    candidati,
     crea_prodotto_lab,
     dettaglio_ricetta,
     elimina_ricetta,
@@ -60,17 +59,14 @@ def test_crea_prodotto_lab_duplicato_respinto(conn):
         crea_prodotto_lab(conn, {"nome": "torta", "unita_misura": "kg"})
 
 
-def test_crea_prodotto_lab_um_obbligatoria(conn):
-    with pytest.raises(ErroreRicetta, match="Unità di misura"):
-        crea_prodotto_lab(conn, {"nome": "Torta", "unita_misura": ""})
-
-
-# ---- candidati ----
-
-def test_candidati_escludono_ricettati_e_acquistati(conn):
-    salva_ricetta(conn, _bigne(famiglia_id=2))
-    nomi = [p["nome"] for p in candidati(conn)]
-    assert nomi == ["Uova pastorizzate"]   # no Bignè (ricettato), no Latte (arrivi)
+def test_crea_prodotto_lab_um_opzionale(conn):
+    # l'u.m. non serve più al prodotto di laboratorio: pensa la resa
+    # della ricetta ('5 kg'). Se arriva vuota, resta NULL
+    p = crea_prodotto_lab(conn, {"nome": "Torta", "unita_misura": ""})
+    riga = conn.execute(
+        "SELECT unita_misura FROM prodotti WHERE id = ?", (p["id"],)
+    ).fetchone()
+    assert riga["unita_misura"] is None
 
 
 # ---- salva + dettaglio ----
@@ -173,6 +169,16 @@ def test_lista_ricette_filtro_testo(conn):
     assert len(lista_ricette(conn)) == 1
     assert lista_ricette(conn, "bign")[0]["prodotto"] == "Bignè"
     assert lista_ricette(conn, "torta") == []
+
+
+def test_lista_ricette_porta_sigla(conn):
+    """La tendina "Prodotto da produrre" di Produzioni nasce dalle ricette:
+    la lista deve portare anche la sigla, con i dati presi da lì."""
+    salva_ricetta(conn, _bigne())
+    r = lista_ricette(conn)[0]
+    assert r["prodotto_id"] == 3
+    assert r["sigla"] == "BIG"
+    assert r["famiglia"] == "Dolci finiti"
 
 
 def test_dettaglio_senza_ricetta_none(conn):

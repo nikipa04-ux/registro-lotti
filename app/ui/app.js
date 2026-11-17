@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, c =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmt = (n) => Number(n).toLocaleString("it-IT", { maximumFractionDigits: 3 });
-const eur = (n) => n == null ? "—" : n.toFixed(2).replace(".", ",") + " €";
+const eur = (n) => n == null ? "—" : n.toFixed(2).replace(".", ",") + "\u00A0€";
 
 // Oggi, come lo conosce il SERVER (non l'orologio del browser)
 let OGGI = new Date().toISOString().slice(0, 10);
@@ -100,6 +100,7 @@ async function caricaDashboard() {
 let INGREDIENTI = [];   // pool per combo + filtri (famiglia NULL = ingrediente)
 let FORNITORI = [];
 let PRODOTTI_LAB = [];  // prodotti di laboratorio (con famiglia)
+let PRODUCIBILI = [];   // prodotti CON ricetta: solo loro si possono produrre
 
 async function caricaAnagrafiche() {
   const [ing, forn, lab] = await Promise.all([
@@ -156,7 +157,7 @@ function renderArrivi(dati) {
       "<td>" + esc(r.fornitore) + "</td>" +
       "<td>" + esc(r.data_arrivo) + "</td>" +
       "<td>" + badgeScadenza(r) + "</td>" +
-      "<td>" + fmt(r.quantita) + " " + esc(r.um || "") + "</td>" +
+      "<td>" + fmt(r.quantita) + "\u00A0" + esc(r.um || "") + "</td>" +
       prezzi + "</tr>";
   }).join("");
   $("tabella-arrivi").innerHTML =
@@ -376,9 +377,13 @@ creaCombo({
     if (!$("na-marca").value && p.marca) $("na-marca").value = p.marca;
   },
   pool: () => INGREDIENTI,
-  onCrea: (nome) => {
+  onCrea: async (nome) => {
     $("qc-prod").hidden = false;
     $("qc-prod-nome").value = nome;
+    // gli allergeni si scelgono subito: se serve, l'elenco si carica ora
+    if (!ANAG_ALLERGENI.length) { try { await caricaAllergeni(); } catch (e) { /* chips vuote */ } }
+    QC_ALLERGENI = new Set();
+    renderChipsAllergeni("qc-chips", QC_ALLERGENI, true);
     $("qc-cons").focus();
   },
 });
@@ -398,8 +403,19 @@ creaCombo({
 
 /* -------- Creazione rapida ingrediente / fornitore -------- */
 
+let QC_ALLERGENI = new Set();   // allergeni scelti nel pannello "➕ Nuovo ingrediente"
+
 $("qc-annulla").addEventListener("click", () => { $("qc-prod").hidden = true; });
 $("qc-forn-annulla").addEventListener("click", () => { $("qc-forn").hidden = true; });
+
+$("qc-chips").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip-allergene");
+  if (!chip) return;
+  const id = Number(chip.dataset.id);
+  if (QC_ALLERGENI.has(id)) QC_ALLERGENI.delete(id);
+  else QC_ALLERGENI.add(id);
+  renderChipsAllergeni("qc-chips", QC_ALLERGENI, true);
+});
 
 function mostraErroreForm(testo) {
   $("na-errore").textContent = testo;
@@ -420,6 +436,7 @@ async function creaIngredienteRapido() {
         sigla: $("qc-sigla").value.trim() || null,
         marca: $("qc-marca").value.trim() || null,
         denominazione_legale: $("qc-denom").value.trim() || null,
+        allergeni: [...QC_ALLERGENI],
       }),
     });
     const corpo = await risposta.json();
@@ -433,6 +450,7 @@ async function creaIngredienteRapido() {
     $("na-um").textContent = corpo.unita_misura ? "(" + corpo.unita_misura + ")" : "";
     if (!$("na-marca").value && corpo.marca) $("na-marca").value = corpo.marca;
     $("qc-prod").hidden = true;
+    QC_ALLERGENI = new Set();
     flashArrivi('Ingrediente "' + corpo.nome + '" creato in anagrafica.');
   } catch (e) {
     mostraErroreForm("Il server non risponde.");
@@ -521,6 +539,16 @@ function flashArrivi(testo) {
 async function avviaProduzioni() {
   try {
     await caricaAnagrafiche();
+    // REGOLA: si produce solo ciò che HA ricetta. La tendina "Prodotto
+    // da produrre" nasce quindi dalle RICETTE, e da lì prende i suoi dati
+    // (prodotto, famiglia, sigla, u.m.): un prodotto senza ricetta non
+    // viene neanche suggerito, la creazione passa dal ➕ in fondo.
+    const ric = await fetch("/api/ricette");
+    if (!ric.ok) throw new Error("ricette non raggiungibili");
+    PRODUCIBILI = (await ric.json()).map(x => ({
+      id: x.prodotto_id, nome: x.prodotto, sigla: x.sigla,
+      famiglia: x.famiglia, unita_misura: x.um,
+    }));
   } catch (e) {
     $("tabella-produzioni").innerHTML = '<div class="loading">Il server non risponde.</div>';
     return;
@@ -639,6 +667,7 @@ $("chiudi-dettaglio-prod").addEventListener("click", () => { $("dettaglio-produz
 
 let PROPOSTA = null;   // la proposta del server per il prodotto scelto
 let RIGHE = [];         // stato delle righe (ricetta + aggiunte), il verbale
+let PANNELLO_ASSEGNA = null;   // indice della riga con il pannello "Assegna lotti" aperto
 let RICETTA_DA_PRODUZIONE = null;  // prodotto_id quando la ricetta nasce dal form produzione
 
 function apriFormProduzione() {
@@ -646,6 +675,7 @@ function apriFormProduzione() {
   $("np-errore").hidden = true;
   PROPOSTA = null;
   RIGHE = [];
+  PANNELLO_ASSEGNA = null;
   $("np-prodotto").value = "";
   $("np-prodotto-id").value = "";
   $("np-hint").hidden = true;
@@ -656,7 +686,6 @@ function apriFormProduzione() {
   $("np-ricetta").innerHTML = '<div class="loading">scegli il prodotto: la proposta FEFO comparirà qui</div>';
   $("qc-npprod").hidden = true;
   $("qc-npprod-nome").value = "";
-  $("qc-nppum").value = "";
   $("qc-npsigla").value = "";
   $("np-prodotto").focus();
 }
@@ -674,7 +703,7 @@ creaCombo({
   gruppo: p => "🥣 " + (p.famiglia || "Senza famiglia"),
   hint: $("np-hint"),
   hintTesto: p => p.famiglia ? '<span class="badge b-gray">' + esc(p.famiglia) + "</span> famiglia della ricetta" : "",
-  pool: () => PRODOTTI_LAB,
+  pool: () => PRODUCIBILI,
   onPick: (p) => {
     $("np-um").textContent = p.unita_misura ? "(" + p.unita_misura + ")" : "";
     caricaProposta(p.id);
@@ -683,7 +712,7 @@ creaCombo({
     // REGOLA: la creazione non fa mai cambiare schermata, parte dal menu a cascata
     $("qc-npprod").hidden = false;
     $("qc-npprod-nome").value = nome;
-    $("qc-nppum").focus();
+    $("qc-npsigla").focus();
   },
 });
 
@@ -697,9 +726,10 @@ $("qc-npprod-crea").addEventListener("click", async () => {
     const risposta = await fetch("/api/ricette/nuovo-prodotto", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      // niente più u.m.: al prodotto di laboratorio pensa la resa
+      // della ricetta ('5 kg'), che è già autosufficiente
       body: JSON.stringify({
         nome: nome,
-        unita_misura: $("qc-nppum").value.trim(),
         sigla: $("qc-npsigla").value.trim() || null,
       }),
     });
@@ -719,7 +749,8 @@ $("qc-npprod-crea").addEventListener("click", async () => {
 
 // Apre la modale ricetta sopra il form produzione: al salvataggio si torna alla proposta
 async function apriRicettaDaProduzione(prodotto_id) {
-  const p = PRODOTTI_LAB.find(x => x.id === prodotto_id);
+  const p = PRODUCIBILI.find(x => x.id === prodotto_id) ||
+            PRODOTTI_LAB.find(x => x.id === prodotto_id);
   if (!p) return;
   if (!FAMIGLIE.length) { try { await caricaFamiglie(); } catch (e) { /* resta creabile a mano */ } }
   RICETTA_DA_PRODUZIONE = prodotto_id;
@@ -741,20 +772,48 @@ function splitFefo(lotti, qta) {
   return { assegnazioni, mancante: Math.max(0, residuo) };
 }
 
+// La FEFO è la PROPOSTA; l'assegnazione A MANO è l'eccezione scelta
+// dall'operatore (la realtà del laboratorio non è mai perfetta) e vince
+// finché non la si riallinea con il "↩ Riallinea a FEFO" del pannello.
+function totManuale(assegnazioni) {
+  return (assegnazioni || []).reduce((somma, a) => somma + (a.quantita || 0), 0);
+}
+
+function assegnazioniDi(riga) {
+  if (riga.assegnazioni) {
+    const tot = totManuale(riga.assegnazioni);
+    const qta = riga.qta || 0;
+    return {
+      manuali: true,
+      assegnazioni: riga.assegnazioni,
+      mancante: Math.max(0, qta - tot),
+      eccedenza: Math.max(0, tot - qta),
+    };
+  }
+  return { manuali: false, ...splitFefo(riga.lotti || [], riga.qta || 0), eccedenza: 0 };
+}
+
 function chipsDi(riga) {
-  const { assegnazioni, mancante } = splitFefo(riga.lotti || [], riga.qta || 0);
+  const { manuali, assegnazioni, mancante, eccedenza } = assegnazioniDi(riga);
   const vis = assegnazioni.slice(0, 2);
   const extra = assegnazioni.length - vis.length;
   let html = vis.map(a =>
     '<div class="check-chip"><span class="mono">' + esc(a.lotto.codice_lotto) + "</span> " +
     "<b>× " + fmt(a.quantita) + " " + esc(riga.um || "") + "</b> " +
     '<span class="badge b-gray">' + esc(a.lotto.data_scadenza) + "</span>" +
+    (manuali ? ' <span class="badge b-amber">a mano</span>' : "") +
     '<div class="muted">' + (a.lotto.origine === "ingresso" ? esc(a.lotto.fornitore || "") : "lotto interno") + "</div></div>"
   ).join("");
   if (extra > 0) html += '<div class="muted">+ ' + extra + " altro/i lotto/i</div>";
-  if (mancante > 0) html += '<div class="warn">⚠ Giacenze insufficienti: mancano ' + fmt(mancante) + " " + esc(riga.um || "") + "</div>";
+  if (manuali && eccedenza > 0)
+    html += '<div class="warn">⚠ I lotti scelti superano di ' + fmt(eccedenza) + " " + esc(riga.um || "") + ' la quantità della riga (pannello "Assegna lotti").</div>';
+  if (mancante > 0) html += manuali
+    ? '<div class="warn">⚠ Assegnazione a mano incompleta: mancano ' + fmt(mancante) + " " + esc(riga.um || "") + ' (sistema con "Assegna lotti" o ↩ FEFO).</div>'
+    : '<div class="warn">⚠ Giacenze insufficienti: mancano ' + fmt(mancante) + " " + esc(riga.um || "") + "</div>";
   if (!assegnazioni.length && !(riga.qta > 0)) html += '<div class="muted">Indica una quantità: l\'assegnazione FEFO comparirà qui.</div>';
-  else if (!assegnazioni.length) html += '<div class="warn">⚠ Nessun lotto disponibile di questo ingrediente</div>';
+  else if (!assegnazioni.length) html += ingredienteAcquistato(riga)
+    ? '<div class="warn">⚠ Nessun lotto in magazzino: ⚖ Assegna lotti → ➕ registra il lotto che hai davanti.</div>'
+    : '<div class="warn">⚠ Nessun lotto disponibile di questo ingrediente</div>';
   return html;
 }
 
@@ -779,9 +838,11 @@ function renderRighe() {
       '<b>' + esc(r.nome) + '</b> <span class="badge b-gray">' + esc(r.um || "") + "</span>" +
       (r.famiglia ? ' <span class="badge b-gray">' + esc(r.famiglia) + "</span>" : "") +
       '<span class="muted">da ricetta: ' + fmt(r.qta_ricetta) + "</span>" +
+      '<button class="btn sec mini" data-assegna="' + i + '" title="Scegli tu quali lotti usare (e quanto da ciascuno), oppure registra al volo un lotto non in elenco">⚖ Assegna lotti</button>' +
       '<button class="btn sec mini rosso" data-escludi="' + i + '" title="Escludi questa riga solo per questa produzione">✕</button>' +
       "</div>" +
       '<div class="chips" data-chips="' + i + '">' + chipsDi(riga) + "</div>" +
+      (PANNELLO_ASSEGNA === i ? pannelloAssegna(riga) : "") +
       "</div>";
   });
   // Righe aggiunte (fuori ricetta): valgono solo per questa produzione
@@ -803,9 +864,11 @@ function renderRighe() {
       '<input type="number" step="0.001" min="0" value="' + (r.qta || "") + '" data-qta="' + i + '" class="qta-input">' +
       "<b>" + esc(r.nome) + '</b> <span class="badge b-gray">' + esc(r.um || "") + "</span>" +
       '<span class="badge b-amber">aggiunta</span>' +
+      (r.nome ? '<button class="btn sec mini" data-assegna="' + i + '" title="Scegli tu quali lotti usare (e quanto da ciascuno), oppure registra al volo un lotto non in elenco">⚖ Assegna lotti</button>' : "") +
       '<button class="btn sec mini rosso" data-escludi="' + i + '" title="Rimuovi aggiunta">✕</button>' +
       "</div>" +
       '<div class="chips" data-chips="' + i + '">' + chipsDi(r) + "</div>" +
+      (PANNELLO_ASSEGNA === i ? pannelloAssegna(r) : "") +
       "</div>";
   });
   html += '<button class="btn sec" id="np-aggiungi">+ Aggiungi ingrediente</button>';
@@ -820,6 +883,7 @@ function renderRighe() {
   cont.querySelectorAll("[data-escludi]").forEach(btn =>
     btn.addEventListener("click", () => {
       const i = Number(btn.dataset.escludi);
+      PANNELLO_ASSEGNA = null;   // il pannello non sopravvive a spostamenti di riga
       if (RIGHE[i].fonte === "aggiunta") RIGHE.splice(i, 1);
       else RIGHE[i].attiva = false;
       renderRighe();
@@ -831,6 +895,9 @@ function renderRighe() {
       if (!p) return;   // "— scegli ingrediente —" rimane
       RIGHE[i].nome = p.nome;
       RIGHE[i].um = p.unita_misura;
+      RIGHE[i].ingrediente_id = p.id;   // serve al pannello ⚖ (registra lotto al volo)
+      RIGHE[i].assegnazioni = null;   // lotti nuovi: si riparte dalla FEFO
+      PANNELLO_ASSEGNA = null;
       try {
         const r = await fetch("/api/produzioni/lotti?ingrediente_id=" + p.id);
         RIGHE[i].lotti = await r.json();
@@ -839,9 +906,63 @@ function renderRighe() {
     }));
   cont.querySelectorAll("[data-ripristina]").forEach(btn =>
     btn.addEventListener("click", () => {
+      PANNELLO_ASSEGNA = null;
       RIGHE[Number(btn.dataset.ripristina)].attiva = true;
       renderRighe();
     }));
+  // ⚖ Assegna lotti: l'eccezione a mano alla proposta FEFO
+  cont.querySelectorAll("[data-assegna]").forEach(btn =>
+    btn.addEventListener("click", () => {
+      PANNELLO_ASSEGNA = Number(btn.dataset.assegna);
+      renderRighe();
+    }));
+  cont.querySelectorAll("[data-assegna-qta]").forEach(inp =>
+    inp.addEventListener("input", aggiornaTotaleAssegna));
+  const aOk = cont.querySelector("#np-assegna-ok");
+  if (aOk) {
+    aOk.addEventListener("click", confermaAssegna);
+    cont.querySelector("#np-assegna-annulla").addEventListener("click", () => {
+      PANNELLO_ASSEGNA = null;
+      renderRighe();
+    });
+    cont.querySelector("#np-assegna-fefo").addEventListener("click", () => {
+      const riga = RIGHE[PANNELLO_ASSEGNA];
+      if (riga) riga.assegnazioni = null;   // si torna alla proposta automatica
+      PANNELLO_ASSEGNA = null;
+      renderRighe();
+    });
+    aggiornaTotaleAssegna();
+    // ➕ "Il lotto non è in elenco? Registralo": creazione senza cambiar schermata
+    const alMostra = cont.querySelector("#al-mostra");
+    if (alMostra) {
+      const alForm = cont.querySelector("#al-form");
+      alMostra.addEventListener("click", () => {
+        alForm.hidden = false;
+        alMostra.hidden = true;
+        cont.querySelector("#al-codice").focus();
+      });
+      cont.querySelector("#al-annulla").addEventListener("click", () => {
+        alForm.hidden = true;
+        alMostra.hidden = false;
+      });
+      cont.querySelector("#al-qcf-annulla").addEventListener("click", () => {
+        cont.querySelector("#al-qcf").hidden = true;
+      });
+      cont.querySelector("#al-qcf-crea").addEventListener("click", creaFornitoreDaAssegna);
+      cont.querySelector("#al-crea").addEventListener("click", registraLottoAssegna);
+      creaCombo({
+        input: cont.querySelector("#al-fornitore"), tendina: cont.querySelector("#dd-alforn"),
+        idNascosto: cont.querySelector("#al-fornitore-id"),
+        gruppo: () => "Tutti i fornitori",
+        pool: () => FORNITORI,
+        onCrea: (nome) => {
+          cont.querySelector("#al-qcf").hidden = false;
+          cont.querySelector("#al-qcf-nome").value = nome;
+          cont.querySelector("#al-qcf-piva").focus();
+        },
+      });
+    }
+  }
   const agg = cont.querySelector("#np-aggiungi");
   if (agg) agg.addEventListener("click", aggiungiRiga);
 }
@@ -850,6 +971,196 @@ function aggiungiRiga() {
   // Riga aggiunta "in attesa": l'operatore sceglie l'ingrediente dal select
   // renderizzato da renderRighe (così sopravvive a ogni re-render finché non sceglie)
   RIGHE.push({ fonte: "aggiunta", nome: null, um: "", lotti: [], qta: 0, attiva: true });
+  renderRighe();
+}
+
+/* ---- ⚖ Assegna lotti: quanto prendere da ogni lotto, a mano ---- */
+
+function ingredienteAcquistato(riga) {
+  // famiglia NULL = ingrediente acquistato: solo lui può nascere da un
+  // arrivo (specchio della guardia di registra_arrivo, che respinge i
+  // prodotti di laboratorio: quelli nascono da una produzione)
+  return !!riga.ingrediente_id && INGREDIENTI.some(x => x.id === riga.ingrediente_id);
+}
+
+function pannelloAssegna(riga) {
+  // Si parte dalle assegnazioni correnti: a mano se ci sono, sennò la FEFO
+  const attuali = riga.assegnazioni || splitFefo(riga.lotti || [], riga.qta || 0).assegnazioni;
+  const lotti = riga.lotti || [];
+  let html = '<div class="assegna-pannello">' +
+    '<div class="muted">Quanto prendi da ogni lotto? La somma deve coincidere con la quantità della riga: <b>' +
+    fmt(riga.qta || 0) + " " + esc(riga.um || "") + "</b>.</div>";
+  html += lotti.map(l => {
+    const presa = attuali.find(a => a.lotto && a.lotto.id === l.id);
+    return '<div class="assegna-riga">' +
+      '<input type="number" step="0.001" min="0" class="qta-input" data-assegna-qta="' + l.id + '" value="' + (presa ? presa.quantita : "") + '">' +
+      '<span class="mono">' + esc(l.codice_lotto) + "</span> " +
+      '<span class="badge b-gray">' + esc(l.data_scadenza) + "</span> " +
+      '<span class="muted">residuo ' + fmt(l.quantita_residua || 0) + " " + esc(riga.um || "") + "</span> " +
+      '<span class="muted">' + (l.origine === "ingresso" ? esc(l.fornitore || "") : "lotto interno") + "</span>" +
+      "</div>";
+  }).join("");
+  if (!lotti.length)
+    html += '<div class="muted">Nessun lotto in elenco per questo ingrediente.</div>';
+  html += '<div class="f-azioni">' +
+    '<span id="np-assegna-tot" class="muted"></span>' +
+    '<button class="btn" id="np-assegna-ok">Conferma</button>' +
+    '<button class="btn sec" id="np-assegna-fefo" title="Torna alla proposta automatica">↩ Riallinea a FEFO</button>' +
+    '<button class="btn sec" id="np-assegna-annulla">Annulla</button>' +
+    "</div>";
+  // REGOLA COMBOBOX: il ➕ sta SEMPRE in fondo. Il lotto realmente usato
+  // potrebbe non essere ancora registrato (la merce arriva, la burocrazia
+  // dopo): qui nasce un VERO arrivo, così la tracciabilità resta intatta
+  if (ingredienteAcquistato(riga)) {
+    const mancante = Math.max(0, (riga.qta || 0) - totManuale(attuali));
+    html += '<div class="assegna-registra">' +
+      '<button class="btn sec mini" id="al-mostra">➕ Il lotto non è in elenco? Registralo</button>' +
+      '<div id="al-form" hidden>' +
+      '<div class="assegna-riga">' +
+      '<input type="text" id="al-codice" autocomplete="off" placeholder="Codice lotto (dall\'etichetta)">' +
+      '<input type="number" step="0.001" min="0" class="qta-input" id="al-qta" placeholder="' + esc(riga.um || "quantità") + '" value="' + (mancante || "") + '">' +
+      '<input type="date" id="al-scadenza">' +
+      "</div>" +
+      '<div class="assegna-riga">' +
+      '<div class="combo">' +
+      '<input type="text" id="al-fornitore" autocomplete="off" placeholder="Fornitore (cerca o ➕)…">' +
+      '<div class="combo-dd" id="dd-alforn" hidden></div>' +
+      "</div>" +
+      '<input type="hidden" id="al-fornitore-id">' +
+      "</div>" +
+      '<div class="assegna-riga" id="al-qcf" hidden>' +
+      '<input type="text" id="al-qcf-nome" placeholder="Nome del fornitore">' +
+      '<input type="text" id="al-qcf-piva" placeholder="P.IVA (facoltativa)">' +
+      '<button class="btn mini" id="al-qcf-crea">Crea</button>' +
+      '<button class="btn sec mini" id="al-qcf-annulla">Annulla</button>' +
+      "</div>" +
+      '<div class="assegna-riga">' +
+      '<button class="btn mini" id="al-crea">Registra il lotto</button>' +
+      '<button class="btn sec mini" id="al-annulla">Annulla</button>' +
+      '<span class="muted">arrivo di oggi: marca e prezzi li completi in Arrivi</span>' +
+      "</div>" +
+      "</div></div>";
+  } else if (!lotti.length) {
+    html += '<div class="muted">Questo prodotto nasce da una produzione: un arrivo qui non si registra.</div>';
+  }
+  html += "</div>";
+  return html;
+}
+
+async function creaFornitoreDaAssegna() {
+  // Creazione rapida fornitore dentro il pannello ⚖ (pattern qc-forn di Arrivi)
+  const nome = $("al-qcf-nome").value.trim();
+  if (!nome) return mostraErroreProduzione("Inserisci un nome.");
+  try {
+    const risposta = await fetch("/api/anagrafiche/fornitori", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome: nome, piva: $("al-qcf-piva").value.trim() || null }),
+    });
+    const corpo = await risposta.json();
+    if (!risposta.ok)
+      return mostraErroreProduzione(typeof corpo.detail === "string" ? corpo.detail : "Controlla i dati del nuovo fornitore.");
+    FORNITORI.push(corpo);
+    $("al-fornitore-id").value = String(corpo.id);
+    $("al-fornitore").value = corpo.nome;
+    $("al-qcf").hidden = true;
+  } catch (e) {
+    mostraErroreProduzione("Il server non risponde.");
+  }
+}
+
+async function registraLottoAssegna() {
+  // Il lotto digitato a mano diventa un VERO arrivo (tracciabilità intatta:
+  // scarico giacenze e verbale puntano a un lotto che esiste davvero).
+  // Arrivo = oggi; marca e prezzi si completano in Arrivi quando si vuole.
+  const riga = RIGHE[PANNELLO_ASSEGNA];
+  if (!riga || !riga.ingrediente_id) return;
+  const codice = $("al-codice").value.trim();
+  const quantita = Number($("al-qta").value);
+  const scadenza = $("al-scadenza").value;
+  const fornitore_id = Number($("al-fornitore-id").value) || 0;
+  if (!codice) return mostraErroreProduzione("Manca il codice lotto dell'etichetta.");
+  if (!quantita || quantita <= 0) return mostraErroreProduzione("La quantità del lotto deve essere maggiore di zero.");
+  if (!scadenza) return mostraErroreProduzione("Inserisci la data di scadenza del lotto.");
+  if (!fornitore_id) return mostraErroreProduzione("Scegli il fornitore (o crealo con ➕).");
+  try {
+    const risposta = await fetch("/api/arrivi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prodotto_id: riga.ingrediente_id,
+        fornitore_id: fornitore_id,
+        codice_lotto: codice,
+        data_arrivo: OGGI,
+        data_scadenza: scadenza,
+        quantita: quantita,
+      }),
+    });
+    const corpo = await risposta.json();
+    if (!risposta.ok)
+      return mostraErroreProduzione(typeof corpo.detail === "string" ? corpo.detail : "Registrazione rifiutata.");
+    const nuovo = {
+      id: corpo.id, codice_lotto: corpo.codice_lotto,
+      data_scadenza: corpo.data_scadenza, quantita_residua: corpo.quantita_residua,
+      origine: "ingresso", fornitore: corpo.fornitore,
+    };
+    riga.lotti = riga.lotti || [];
+    riga.lotti.push(nuovo);
+    // Il lotto appena registrato è quello che l'operatore ha davanti:
+    // la MANO lo mette in cima e la FEFO copre il resto della riga
+    const bisogno = riga.qta || 0;
+    const dalNuovo = Math.min(quantita, bisogno);
+    const dalResto = splitFefo(riga.lotti.filter(l => l.id !== nuovo.id), bisogno - dalNuovo).assegnazioni;
+    riga.assegnazioni = (dalNuovo > 0 ? [{ lotto: nuovo, quantita: dalNuovo }] : []).concat(dalResto);
+    // un arrivo in più: Arrivi e Dashboard rivedranno il mondo al prossimo passaggio
+    sezioniCaricate.arrivi = false;
+    sezioniCaricate.dashboard = false;
+    renderRighe();   // il pannello si riapre col lotto nuovo già in elenco
+  } catch (e) {
+    mostraErroreProduzione("Il server non risponde.");
+  }
+}
+
+function lettiDalPannello() {
+  // [lotto, quantita] di ogni input > 0 del pannello aperto
+  const riga = RIGHE[PANNELLO_ASSEGNA];
+  const presi = [];
+  if (!riga) return presi;
+  $("np-ricetta").querySelectorAll("[data-assegna-qta]").forEach(inp => {
+    const qta = Number(inp.value) || 0;
+    const lotto = (riga.lotti || []).find(l => l.id === Number(inp.dataset.assegnaQta));
+    if (qta > 0 && lotto) presi.push({ lotto, quantita: qta });
+  });
+  return presi;
+}
+
+function aggiornaTotaleAssegna() {
+  const riga = RIGHE[PANNELLO_ASSEGNA];
+  const span = $("np-ricetta").querySelector("#np-assegna-tot");
+  const ok = $("np-ricetta").querySelector("#np-assegna-ok");
+  if (!riga || !span || !ok) return;
+  const presi = lettiDalPannello();
+  const tot = totManuale(presi);
+  const qta = riga.qta || 0;
+  let testo, valido = true;
+  const sfora = presi.find(a => a.quantita > (a.lotto.quantita_residua || 0) + 1e-9);
+  if (sfora) { testo = "⚠ Il lotto " + sfora.lotto.codice_lotto + " non ha tutta questa giacenza."; valido = false; }
+  else if (tot < qta - 1e-9) { testo = "⚠ Mancano " + fmt(qta - tot) + " " + (riga.um || "") + " per coprire la riga."; valido = false; }
+  else if (tot > qta + 1e-9) { testo = "⚠ Superi la riga di " + fmt(tot - qta) + " " + (riga.um || "") + "."; valido = false; }
+  else testo = "✔ Somma: " + fmt(tot) + " / " + fmt(qta) + " " + (riga.um || "");
+  span.textContent = testo;
+  ok.disabled = !valido;
+}
+
+function confermaAssegna() {
+  const riga = RIGHE[PANNELLO_ASSEGNA];
+  if (!riga) { PANNELLO_ASSEGNA = null; renderRighe(); return; }
+  aggiornaTotaleAssegna();   // nessuna conferma sporca: si rivalida ora
+  if ($("np-ricetta").querySelector("#np-assegna-ok").disabled) return;
+  const presi = lettiDalPannello();
+  // nessuna quantità a mano = nessuna eccezione: si torna alla proposta FEFO
+  riga.assegnazioni = presi.length ? presi : null;
+  PANNELLO_ASSEGNA = null;
   renderRighe();
 }
 
@@ -863,7 +1174,8 @@ async function caricaProposta(prodotto_id) {
       let html = '<div class="warn">⚠ ' + esc(msg) + "</div>";
       // REGOLA: se la ricetta non esiste, si crea al volo senza cambiare schermata
       if (/ricetta/i.test(msg)) {
-        const p = PRODOTTI_LAB.find(x => x.id === prodotto_id);
+        const p = PRODUCIBILI.find(x => x.id === prodotto_id) ||
+                  PRODOTTI_LAB.find(x => x.id === prodotto_id);
         html += '<div class="f-azioni" style="margin-top:8px">' +
           '<button class="btn" id="np-crea-ricetta">➕ Crea la ricetta' +
           (p ? " di " + esc(p.nome) : "") + " ora</button></div>";
@@ -875,6 +1187,7 @@ async function caricaProposta(prodotto_id) {
     }
     PROPOSTA = dati;
     RIGHE = dati.righe.map(r => ({ ...r, qta: r.qta_ricetta, attiva: true, fonte: "ricetta" }));
+    PANNELLO_ASSEGNA = null;
     // Prezzo di default della quantità prodotta: la resa della ricetta
     const resa = parseFloat((dati.ricetta.resa || "").replace(",", "."));
     if (resa && !$("np-qta").value) $("np-qta").value = resa;
@@ -895,10 +1208,28 @@ async function salvaProduzione() {
   const qtaProdotta = $("np-qta").value === "" ? null : Number($("np-qta").value);
   if (qtaProdotta !== null && qtaProdotta <= 0) return mostraErroreProduzione("La quantità prodotta deve essere maggiore di zero.");
 
-  // Il verbale: consumi calcolati con la stessa FEFO mostrata
+  // Il verbale: consumi calcolati con la stessa FEFO mostrata,
+  // oppure i lotti scelti A MANO con "⚖ Assegna lotti"
   const consumi = [];
   for (const r of RIGHE.filter(x => x.attiva && x.qta > 0)) {
-    const { assegnazioni, mancante } = splitFefo(r.lotti || [], r.qta);
+    let assegnazioni;
+    let mancante = 0;
+    if (r.assegnazioni) {
+      // scelta a mano: la somma deve COINCIDERE con la quantità della riga
+      assegnazioni = r.assegnazioni;
+      const tot = totManuale(assegnazioni);
+      if (tot < r.qta - 1e-9)
+        return mostraErroreProduzione('La riga "' + r.nome + '" non è coperta dai lotti scelti: mancano ' +
+          fmt(r.qta - tot) + " " + (r.um || "") + ' (sistema con "Assegna lotti" o ↩ FEFO).');
+      if (tot > r.qta + 1e-9)
+        return mostraErroreProduzione('La riga "' + r.nome + '": i lotti scelti superano la quantità di ' +
+          fmt(tot - r.qta) + " " + (r.um || "") + ".");
+      const sfora = assegnazioni.find(a => a.quantita > (a.lotto.quantita_residua || 0) + 1e-9);
+      if (sfora)
+        return mostraErroreProduzione("Giacenza insufficiente nel lotto " + sfora.lotto.codice_lotto + ".");
+    } else {
+      ({ assegnazioni, mancante } = splitFefo(r.lotti || [], r.qta));
+    }
     if (mancante > 0) return mostraErroreProduzione('Giacenze insufficienti per "' + r.nome + '": mancano ' + fmt(mancante) + " " + esc(r.um || "") + ".");
     for (const a of assegnazioni) {
       consumi.push({
@@ -952,16 +1283,19 @@ function flashProduzioni(testo) {
 
 /* =========================== Ricette =========================== */
 /* Il MASTER: crea e corregge le ricette. La famiglia del prodotto nasce
-   qui (select o nome nuovo: l'utente ne crea quante vuole). */
+   qui (combobox con ➕: l'utente ne crea quante vuole). Il prodotto da
+   produrre è la lista che esiste in quel momento: nessun suggerimento
+   automatico, se non c'è lo si crea con ➕. */
 
-let CANDIDATI = [];   // prodotti senza ricetta (per il combo "nuova")
 let FAMIGLIE = [];
 let RIGHE_R = [];     // righe della ricetta in editing
 let RICETTA_IN_EDIT = null;   // prodotto_id quando si modifica, null se nuova
 
 async function avviaRicette() {
   try {
-    await Promise.all([caricaAnagrafiche(), caricaFamiglie(), caricaCandidati()]);
+    // il pool del prodotto è tutta l'anagrafica che esiste in quel
+    // momento: niente liste speciali, niente suggerimenti automatici
+    await Promise.all([caricaAnagrafiche(), caricaFamiglie()]);
   } catch (e) {
     $("tabella-ricette").innerHTML = '<div class="loading">Il server non risponde.</div>';
     return;
@@ -975,16 +1309,11 @@ async function caricaFamiglie() {
   FAMIGLIE = await r.json();
 }
 
-async function caricaCandidati() {
-  const r = await fetch("/api/ricette/candidati");
-  if (!r.ok) throw new Error("candidati non raggiungibili");
-  CANDIDATI = await r.json();
-}
-
-function popolaSelectFamiglie(selezionata) {
-  $("nr-famiglia").innerHTML = '<option value="">— scegli —</option>' +
-    FAMIGLIE.map(f => '<option value="' + f.id + '">' + esc(f.nome) + "</option>").join("");
-  if (selezionata) $("nr-famiglia").value = String(selezionata);
+function impostaFamigliaForm(id, nome) {
+  // la famiglia è una combobox: testo visibile + id nascosto
+  $("nr-famiglia-id").value = id ? String(id) : "";
+  $("nr-famiglia").value = nome || "";
+  $("qc-fam").hidden = true;
 }
 
 async function caricaRicette() {
@@ -998,6 +1327,15 @@ async function caricaRicette() {
   }
 }
 
+// La resa della ricetta è testo libero che può già contenere l'u.m.
+// ('5 kg', '60 pz'): in tabella l'u.m. si mostra solo se la resa NON
+// finisce già con lei (altrimenti verrebbe '5 kg kg').
+function resaHaGiaUm(resa, um) {
+  if (!um) return true;
+  const t = (resa || "").trim().toLowerCase();
+  return t.endsWith(String(um).trim().toLowerCase());
+}
+
 function renderRicette(righe) {
   $("contatore-ricette").textContent = righe.length + " ricette";
   if (!righe.length) {
@@ -1009,7 +1347,8 @@ function renderRicette(righe) {
     '<tr data-id="' + r.prodotto_id + '">' +
     "<td><b>" + esc(r.prodotto) + "</b>" +
     (r.famiglia ? ' <span class="badge b-gray">' + esc(r.famiglia) + "</span>" : "") + "</td>" +
-    "<td>" + esc(r.resa || "—") + " <span class='muted'>" + esc(r.um || "") + "</span></td>" +
+    "<td>" + esc(r.resa || "—") +
+    (!resaHaGiaUm(r.resa, r.um) ? " <span class='muted'>" + esc(r.um) + "</span>" : "") + "</td>" +
     "<td>" + r.n_righe + " ingredienti</td>" +
     "<td>" + (r.procedimento ? "sì" : "<span class='muted'>—</span>") + "</td></tr>").join("");
   $("tabella-ricette").innerHTML =
@@ -1066,16 +1405,37 @@ async function apriDettaglioRicetta(prodotto_id) {
 
 /* -------- Modale nuova/modifica ricetta -------- */
 
+// Resa divisa: quantità (numero) + unità di misura. Nel database resta il
+// testo combinato ('5 kg': lo capiscono etichetta e foodcost), ma il form
+// lavora separato: base per il futuro calcolatore dinamico.
+function dividiResa(resa) {
+  const t = (resa || "").trim();
+  if (!t) return { qta: "", um: "" };
+  const m = t.match(/^([0-9]+(?:[.,][0-9]+)?)(?:\s+(.*))?$/);
+  if (m) return { qta: m[1], um: m[2] || "" };
+  // resa libera storica ('una teglia'): resta intera nel campo u.m.
+  return { qta: "", um: t };
+}
+
+function unisciResa(qta, um) {
+  const q = (qta || "").trim();
+  const u = (um || "").trim();
+  if (q && u) return q + " " + u;
+  if (q) return q;
+  return u || null;
+}
+
 function apriFormRicetta(dati) {
   // dati = dettaglio ricetta (modifica) oppure null (nuova)
   $("overlay-ricetta").hidden = false;
   $("nr-errore").hidden = true;
   $("qc-rprod").hidden = true;
-  $("nr-famiglia-nuova").value = "";
+  $("qc-fam").hidden = true;
   $("nr-procedimento").value = "";
-  $("nr-resa").value = "";
+  $("nr-resa-qta").value = "";
+  $("nr-resa-um").value = "";
   RIGHE_R = [];
-  popolaSelectFamiglie(dati ? dati.famiglia_id : null);
+  impostaFamigliaForm(dati ? dati.famiglia_id : null, dati ? dati.famiglia : null);
   if (dati) {
     RICETTA_IN_EDIT = dati.prodotto.id;
     $("nr-titolo").textContent = "Modifica ricetta: " + dati.prodotto.nome;
@@ -1083,7 +1443,9 @@ function apriFormRicetta(dati) {
     $("nr-prodotto").disabled = true;
     $("nr-prodotto-id").value = String(dati.prodotto.id);
     $("nr-um").textContent = dati.prodotto.unita_misura ? "(" + dati.prodotto.unita_misura + ")" : "";
-    $("nr-resa").value = dati.resa || "";
+    const RESA = dividiResa(dati.resa);
+    $("nr-resa-qta").value = RESA.qta;
+    $("nr-resa-um").value = RESA.um;
     $("nr-procedimento").value = dati.procedimento || "";
     RIGHE_R = dati.righe.map(r => ({
       ingrediente_id: r.ingrediente_id, nome: r.nome,
@@ -1098,12 +1460,6 @@ function apriFormRicetta(dati) {
     $("nr-prodotto-id").value = "";
     $("nr-um").textContent = "";
     $("nr-hint").hidden = true;
-    if (CANDIDATI.length === 1) {
-      // un solo candidato: lo pre-seleziono (il caso "Bignè senza ricetta")
-      $("nr-prodotto-id").value = String(CANDIDATI[0].id);
-      $("nr-prodotto").value = CANDIDATI[0].nome;
-      $("nr-um").textContent = CANDIDATI[0].unita_misura ? "(" + CANDIDATI[0].unita_misura + ")" : "";
-    }
   }
   if (!RIGHE_R.length) aggiungiRigaR();
   else renderRigheRicetta();
@@ -1182,10 +1538,9 @@ function mostraErroreRicetta(testo) {
 async function salvaRicetta() {
   const prodotto_id = Number($("nr-prodotto-id").value) || null;
   if (!prodotto_id) return mostraErroreRicetta("Scegli il prodotto dalla tendina (o crealo con ➕).");
-  const famiglia_nuova = $("nr-famiglia-nuova").value.trim();
-  const famiglia_id = famiglia_nuova ? null : (Number($("nr-famiglia").value) || null);
-  if (!famiglia_id && !famiglia_nuova)
-    return mostraErroreRicetta("Scegli una famiglia o scrivi il nome di una nuova.");
+  const famiglia_id = Number($("nr-famiglia-id").value) || null;
+  if (!famiglia_id)
+    return mostraErroreRicetta("Scegli una famiglia (oppure creane una nuova con ➕).");
   const righe = RIGHE_R.filter(r => r.ingrediente_id);
   if (!righe.length) return mostraErroreRicetta("Aggiungi almeno un ingrediente.");
   if (righe.some(r => !r.qta || r.qta <= 0))
@@ -1199,8 +1554,8 @@ async function salvaRicetta() {
       body: JSON.stringify({
         prodotto_id: prodotto_id,
         famiglia_id: famiglia_id,
-        famiglia_nuova: famiglia_nuova || null,
-        resa: $("nr-resa").value.trim() || null,
+        famiglia_nuova: null,
+        resa: unisciResa($("nr-resa-qta").value, $("nr-resa-um").value),
         procedimento: $("nr-procedimento").value.trim() || null,
         righe: righe.map(r => ({ ingrediente_id: r.ingrediente_id, quantita: r.qta })),
       }),
@@ -1230,6 +1585,18 @@ async function salvaRicetta() {
       const pid = RICETTA_DA_PRODUZIONE;
       RICETTA_DA_PRODUZIONE = null;
       $("overlay-ricetta").hidden = true;
+      // il prodotto è diventato producibile: entra SUBITO nella tendina,
+      // con i dati che la ricetta gli ha appena dato (famiglia in primis)
+      PRODUCIBILI = PRODUCIBILI.filter(x => x.id !== corpo.prodotto.id);
+      PRODUCIBILI.push({
+        id: corpo.prodotto.id, nome: corpo.prodotto.nome,
+        sigla: corpo.prodotto.sigla, unita_misura: corpo.prodotto.unita_misura,
+        famiglia: corpo.famiglia,
+      });
+      // e le altre sezioni rivedranno il mondo al prossimo passaggio
+      sezioniCaricate.produzioni = false;
+      sezioniCaricate.arrivi = false;
+      sezioniCaricate.anagrafiche = false;
       caricaProposta(pid);
       return;
     }
@@ -1239,6 +1606,7 @@ async function salvaRicetta() {
     // le combo di produzioni e i filtri di arrivi devono rivedere il mondo
     sezioniCaricate.produzioni = false;
     sezioniCaricate.arrivi = false;
+    sezioniCaricate.anagrafiche = false;   // la ricetta può cambiare famiglie/prodotti
     avviaRicette();
   } catch (e) {
     mostraErroreRicetta("Il server non risponde.");
@@ -1257,6 +1625,7 @@ function flashRicette(testo) {
 
 $("btn-nuova-ricetta").addEventListener("click", () => apriFormRicetta(null));
 $("nr-annulla").addEventListener("click", chiudiFormRicetta);
+$("nr-salva").addEventListener("click", salvaRicetta);
 $("overlay-ricetta").addEventListener("click", (e) => { if (e.target === e.currentTarget) chiudiFormRicetta(); });
 $("chiudi-dettaglio-ric").addEventListener("click", () => { $("dettaglio-ricetta").hidden = true; });
 
@@ -1274,16 +1643,24 @@ creaCombo({
   hintTesto: p => p.unita_misura
     ? "u.m. <b>" + esc(p.unita_misura) + "</b>" + (p.sigla ? " · sigla <b>" + esc(p.sigla) + "</b>" : "")
     : "",
-  pool: () => CANDIDATI,
-  onPick: (p) => {
+  // tutta l'anagrafica (ingredienti + prodotti di laboratorio): anche un
+  // prodotto nato dal ➕ e rimasto senza famiglia resta raggiungibile
+  pool: () => INGREDIENTI.concat(PRODOTTI_LAB),
+  onPick: async (p) => {
     $("nr-um").textContent = p.unita_misura ? "(" + p.unita_misura + ")" : "";
+    // il salvataggio è un upsert: se il prodotto scelto ha già una
+    // ricetta, la si apre in MODIFICA (mai sovrascritture cieche)
+    try {
+      const r = await fetch("/api/ricette/" + p.id);
+      const dati = await r.json();
+      if (!dati.errore) apriFormRicetta(dati);
+    } catch (e) { /* resta "nuova": al limite lo scopre il salvataggio */ }
   },
   onCrea: (nome) => {
     $("qc-rprod-nome").value = nome;
-    $("qc-rum").value = "";
     $("qc-rsigla").value = "";
     $("qc-rprod").hidden = false;
-    $("qc-rum").focus();
+    $("qc-rsigla").focus();
   },
 });
 
@@ -1296,9 +1673,10 @@ $("qc-rprod-crea").addEventListener("click", async () => {
     const risposta = await fetch("/api/ricette/nuovo-prodotto", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      // niente più u.m.: al prodotto di laboratorio pensa la resa
+      // della ricetta ('5 kg'), che è già autosufficiente
       body: JSON.stringify({
         nome: nome,
-        unita_misura: $("qc-rum").value.trim(),
         sigla: $("qc-rsigla").value.trim() || null,
       }),
     });
@@ -1307,11 +1685,53 @@ $("qc-rprod-crea").addEventListener("click", async () => {
       mostraErroreRicetta(typeof corpo.detail === "string" ? corpo.detail : "Creazione rifiutata.");
       return;
     }
-    CANDIDATI.push(corpo);
+    PRODOTTI_LAB.push(corpo);
     $("qc-rprod").hidden = true;
     $("nr-prodotto-id").value = String(corpo.id);
     $("nr-prodotto").value = corpo.nome;
     $("nr-um").textContent = corpo.unita_misura ? "(" + corpo.unita_misura + ")" : "";
+  } catch (e) {
+    mostraErroreRicetta("Il server non risponde.");
+  }
+});
+
+/* Famiglia della ricetta: stessa combobox, con creazione rapida ➕
+   (la famiglia è solo un nome: nasce qui e la vede la card Anagrafiche) */
+creaCombo({
+  input: $("nr-famiglia"), tendina: $("dd-fam"),
+  idNascosto: $("nr-famiglia-id"),
+  gruppo: f => "🏷 Famiglie esistenti",
+  pool: () => FAMIGLIE,
+  onCrea: (nome) => {
+    $("qc-fam-nome").value = nome;
+    $("qc-fam").hidden = false;
+    $("qc-fam-nome").focus();
+  },
+});
+
+$("qc-fam-annulla").addEventListener("click", () => { $("qc-fam").hidden = true; });
+
+$("qc-fam-crea").addEventListener("click", async () => {
+  const nome = $("qc-fam-nome").value.trim();
+  if (!nome) return mostraErroreRicetta("Inserisci un nome.");
+  try {
+    const risposta = await fetch("/api/anagrafiche/famiglie", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome: nome }),
+    });
+    const corpo = await risposta.json();
+    if (!risposta.ok) {
+      mostraErroreRicetta(typeof corpo.detail === "string"
+        ? corpo.detail : "Creazione rifiutata.");
+      return;
+    }
+    FAMIGLIE.push(corpo);
+    $("qc-fam").hidden = true;
+    $("nr-famiglia-id").value = String(corpo.id);
+    $("nr-famiglia").value = corpo.nome;
+    sezioniCaricate.anagrafiche = false;   // la card Famiglie la deve rivedere
+    flashRicette('Famiglia "' + corpo.nome + '" creata in anagrafica.');
   } catch (e) {
     mostraErroreRicetta("Il server non risponde.");
   }
@@ -1341,8 +1761,7 @@ let RICETTA_DA_ANAGRAFICA = null;  // prodotto_id: la ricetta nasce dalla scheda
 
 async function avviaAnagrafiche() {
   try {
-    const r = await fetch("/api/anagrafiche/allergeni");
-    if (r.ok) ANAG_ALLERGENI = await r.json();
+    await caricaAllergeni();
   } catch (e) { ANAG_ALLERGENI = []; }
   if (!FAMIGLIE.length) { try { await caricaFamiglie(); } catch (e) { /* ok */ } }
   caricaIngredientiAnag();
@@ -1373,6 +1792,12 @@ function badgeAllergeni(alls) {
     (nomi.length > 2
       ? ' <span class="badge b-red" title="' + esc(nomi.slice(2).join(", ")) + '">+' + (nomi.length - 2) + "</span>"
       : "");
+}
+
+async function caricaAllergeni() {
+  const r = await fetch("/api/anagrafiche/allergeni");
+  if (!r.ok) throw new Error("allergeni non raggiungibili");
+  ANAG_ALLERGENI = await r.json();
 }
 
 function renderChipsAllergeni(dove, attivi, editabile) {
@@ -1421,14 +1846,13 @@ async function caricaProdottiAnag() {
     const righe = await r.json();
     $("anag-conta-pro").textContent = righe.length;
     $("tabella-anag-pro").innerHTML = righe.length
-      ? "<table><tr><th>Nome</th><th>Famiglia</th><th>Allergeni (da ricetta)</th><th>U.m.</th><th>Sigla</th><th>Produzioni</th></tr>" +
+      ? "<table><tr><th>Nome</th><th>Famiglia</th><th>Allergeni (da ricetta)</th><th>Sigla</th><th>Produzioni</th></tr>" +
         righe.map(p =>
           '<tr data-id="' + p.id + '"><td><b>' + esc(p.nome) + "</b></td>" +
           "<td>" + (p.famiglia
             ? '<span class="badge b-gray">' + esc(p.famiglia) + "</span>"
             : '<span class="muted">—</span>') + "</td>" +
           "<td>" + badgeAllergeni(p.allergeni) + "</td>" +
-          "<td>" + esc(p.unita_misura || "") + "</td>" +
           '<td class="mono">' + esc(p.sigla || "—") + "</td>" +
           '<td><span class="badge b-gray">' + p.n_produzioni + "</span></td></tr>"
         ).join("") + "</table>"
@@ -1644,7 +2068,9 @@ function selezionaCons(sel) {
 async function apriDettaglioAnagrafica(id) {
   $("dettaglio-anagrafica").hidden = false;
   $("dettaglio-anagrafica-testo").innerHTML = '<div class="loading">carico i dati…</div>';
-  $("dettaglio-anagrafica").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  // pannello laterale destro (schermi larghi): non serve scrollare da nessuna parte
+  if (getComputedStyle($("dettaglio-anagrafica")).position !== "fixed")
+    $("dettaglio-anagrafica").scrollIntoView({ behavior: "smooth", block: "nearest" });
   try {
     const r = await fetch("/api/anagrafiche/prodotti/" + id);
     const dati = await r.json();
@@ -1660,7 +2086,8 @@ async function apriDettaglioAnagrafica(id) {
 async function apriDettaglioFornitore(id) {
   $("dettaglio-anagrafica").hidden = false;
   $("dettaglio-anagrafica-testo").innerHTML = '<div class="loading">carico i dati…</div>';
-  $("dettaglio-anagrafica").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  if (getComputedStyle($("dettaglio-anagrafica")).position !== "fixed")
+    $("dettaglio-anagrafica").scrollIntoView({ behavior: "smooth", block: "nearest" });
   try {
     const r = await fetch("/api/anagrafiche/fornitori/" + id);
     const dati = await r.json();
@@ -1720,7 +2147,6 @@ function renderSchedaProdotto(d) {
     "<div class='hint'>La famiglia nasce nella ricetta (è il master): qui non si tocca.</div>" +
     "<div class='form-grid'>" +
     "<div><label>Nome *</label><input id='anag-nome' value='" + esc(d.nome) + "'></div>" +
-    "<div><label>Unità di misura *</label><input id='anag-um' value='" + esc(d.unita_misura || "") + "'></div>" +
     "<div><label>Sigla (per il codice lotto interno)</label><input id='anag-sigla' class='mono' value='" + esc(d.sigla || "") + "'></div>" +
     "<div><label>Note</label><input id='anag-note' value='" + esc(d.note || "") + "'></div>" +
     "<div class='full'><label>Allergeni (ereditati dalla ricetta)</label><div class='chips'>" +
@@ -1744,7 +2170,6 @@ function renderSchedaProdotto(d) {
     id: d.id,
     corpo: () => ({
       nome: $("anag-nome").value.trim(),
-      unita_misura: $("anag-um").value.trim(),
       sigla: $("anag-sigla").value.trim(),
       note: $("anag-note").value.trim(),
     }),
@@ -1917,6 +2342,16 @@ function chiudiOverlay(id) { $(id).hidden = true; }
   $(o).addEventListener("click", (e) => { if (e.target === e.currentTarget) chiudiOverlay(o); })
 );
 
+/* Escape: chiude la finestra modale aperta (una sola è visibile alla volta) */
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!$("overlay-ricetta").hidden) return chiudiFormRicetta();
+  if (!$("overlay-produzione").hidden) return chiudiFormProduzione();
+  if (!$("overlay-arrivo").hidden) return chiudiFormArrivo();
+  for (const o of ["overlay-anag-pro", "overlay-anag-for", "overlay-anag-ing"])
+    if (!$(o).hidden) return chiudiOverlay(o);
+});
+
 $("anag-nuovo-ing").addEventListener("click", () => {
   ["nai-nome", "nai-denom", "nai-um", "nai-sigla", "nai-marca", "nai-note"].forEach(i => $(i).value = "");
   $("nai-cons").value = "Frigo";
@@ -2024,7 +2459,7 @@ $("naf-salva").addEventListener("click", async () => {
    la ricetta SUBITO dopo (gerarchia: il master è la ricetta) ---- */
 
 $("anag-nuovo-pro").addEventListener("click", () => {
-  ["nap-nome", "nap-um", "nap-sigla"].forEach(i => $(i).value = "");
+  ["nap-nome", "nap-sigla"].forEach(i => $(i).value = "");
   $("nap-errore").hidden = true;
   $("overlay-anag-pro").hidden = false;
   $("nap-nome").focus();
@@ -2035,14 +2470,14 @@ $("nap-annulla").addEventListener("click", () => chiudiOverlay("overlay-anag-pro
 $("nap-salva").addEventListener("click", async () => {
   const nome = $("nap-nome").value.trim();
   if (!nome) { $("nap-errore").textContent = "Inserisci un nome."; $("nap-errore").hidden = false; return; }
-  const um = $("nap-um").value.trim();
-  if (!um) { $("nap-errore").textContent = "Inserisci l'unità di misura (es. kg, pz)."; $("nap-errore").hidden = false; return; }
   $("nap-salva").disabled = true;
   try {
     const r = await fetch("/api/ricette/nuovo-prodotto", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome: nome, unita_misura: um, sigla: $("nap-sigla").value.trim() || null }),
+      // niente più u.m.: al prodotto di laboratorio pensa la resa
+      // della ricetta ('5 kg'), che è già autosufficiente
+      body: JSON.stringify({ nome: nome, sigla: $("nap-sigla").value.trim() || null }),
     });
     const corpo = await r.json();
     if (!r.ok) {

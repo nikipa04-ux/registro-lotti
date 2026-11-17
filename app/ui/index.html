@@ -166,7 +166,7 @@
         <button class="btn" id="btn-nuovo-arrivo">+ Nuovo arrivo</button>
       </div>
 
-      <div class="card">
+      <div class="card card-larga">
         <h2>Lotti registrati</h2>
         <div id="tabella-arrivi"><div class="loading">carico i dati…</div></div>
       </div>
@@ -212,7 +212,7 @@
     <!-- Creazione rapida ingrediente (se non è in lista) -->
     <div class="qc" id="qc-prod" hidden>
       <div class="qc-tit">➕ Nuovo ingrediente: <input id="qc-prod-nome" class="qc-nome" type="text" placeholder="nome ingrediente">
-        <span class="muted">(poi lo completi in Anagrafiche)</span></div>
+        <span class="muted">(il resto lo completi in Anagrafiche)</span></div>
       <div class="f-row">
         <div class="f-campo">
           <label for="qc-cons">Conservazione *</label>
@@ -240,6 +240,11 @@
           <label for="qc-denom">Denominazione legale (facoltativa)</label>
           <input id="qc-denom" type="text" placeholder="come sull'etichetta d'acquisto">
         </div>
+      </div>
+      <div class="f-campo">
+        <label>Allergeni <span class="muted">(clic per attivare/disattivare)</span></label>
+        <div id="qc-chips" class="chips"></div>
+        <div class="hint">I 14 allergeni obbligatori da etichetta (Reg. UE 1169/2011).</div>
       </div>
       <div class="f-azioni">
         <button class="btn sec" id="qc-annulla">Annulla</button>
@@ -336,10 +341,6 @@
             <span class="muted">(la famiglia arriverà dalla ricetta)</span></div>
           <div class="f-row">
             <div class="f-campo">
-              <label for="qc-nppum">Unità di misura *</label>
-              <input id="qc-nppum" type="text" placeholder="es. kg, pz">
-            </div>
-            <div class="f-campo">
               <label for="qc-npsigla">Sigla (facoltativa)</label>
               <input id="qc-npsigla" type="text" placeholder="es. TOR">
             </div>
@@ -396,10 +397,6 @@
             <span class="muted">(la famiglia arriverà dalla ricetta)</span></div>
           <div class="f-row">
             <div class="f-campo">
-              <label for="qc-rum">Unità di misura *</label>
-              <input id="qc-rum" type="text" placeholder="es. kg, pz">
-            </div>
-            <div class="f-campo">
               <label for="qc-rsigla">Sigla (facoltativa)</label>
               <input id="qc-rsigla" type="text" placeholder="es. TOR">
             </div>
@@ -410,20 +407,34 @@
           </div>
         </div>
       </div>
-      <div class="f-campo">
-        <label for="nr-resa">Resa <span id="nr-um" class="um"></span></label>
-        <input id="nr-resa" type="text" placeholder="es. 60 pz" autocomplete="off">
       </div>
-    </div>
+      <div class="f-row">
+        <div class="f-campo">
+          <label for="nr-resa-qta">Resa: quantità</label>
+          <input id="nr-resa-qta" type="number" step="any" min="0" placeholder="es. 60" inputmode="decimal">
+        </div>
+        <div class="f-campo">
+          <label for="nr-resa-um">Resa: unità di misura <span id="nr-um" class="um"></span></label>
+          <input id="nr-resa-um" type="text" placeholder="es. pz, kg" autocomplete="off">
+        </div>
+      </div>
 
     <div class="f-row">
       <div class="f-campo">
         <label for="nr-famiglia">Famiglia <span class="req">*</span></label>
-        <select id="nr-famiglia"><option value="">— scegli —</option></select>
-      </div>
-      <div class="f-campo">
-        <label for="nr-famiglia-nuova">…oppure creane una nuova</label>
-        <input id="nr-famiglia-nuova" type="text" placeholder="es. Torte, Gelati…" autocomplete="off">
+        <div class="combo">
+          <input id="nr-famiglia" type="text" autocomplete="off"
+                 placeholder="Cerca o crea la famiglia (es. Torte)…">
+          <div class="combo-dd" id="dd-fam" hidden></div>
+        </div>
+        <input type="hidden" id="nr-famiglia-id">
+        <div class="qc" id="qc-fam" hidden>
+          <div class="qc-tit">➕ Nuova famiglia: <input id="qc-fam-nome" class="qc-nome" type="text" placeholder="nome famiglia"></div>
+          <div class="f-azioni">
+            <button class="btn sec" id="qc-fam-annulla">Annulla</button>
+            <button class="btn" id="qc-fam-crea">Crea famiglia</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -547,10 +558,6 @@
       <div class="f-campo">
         <label for="nap-nome">Nome <span class="req">*</span></label>
         <input id="nap-nome" type="text" placeholder="es. Bignè" autocomplete="off">
-      </div>
-      <div class="f-campo">
-        <label for="nap-um">Unità di misura <span class="req">*</span></label>
-        <input id="nap-um" type="text" placeholder="es. kg, pz">
       </div>
       <div class="f-campo">
         <label for="nap-sigla">Sigla (facoltativa)</label>

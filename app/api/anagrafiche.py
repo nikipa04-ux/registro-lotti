@@ -121,14 +121,15 @@ class NuovoProdotto(BaseModel):
     sigla: str | None = None
     marca: str | None = None
     denominazione_legale: str | None = None
+    allergeni: list[int] = []
 
 
 @router.post("/prodotti", status_code=201)
 def crea_prodotto(dati: NuovoProdotto):
     """Creazione rapida INGREDIENTE (famiglia NULL) dalle combo delle altre
     schermate. Qui nascono i dati dell'anagrafica (conservazione, u.m.,
-    denominazione legale): in Anagrafiche si completerà il resto (allergeni,
-    note). I prodotti di laboratorio NON nascono qui: la loro anagrafica è
+    denominazione legale, allergeni): il resto si completa in Anagrafiche.
+    I prodotti di laboratorio NON nascono qui: la loro anagrafica è
     la ricetta.
     """
     with connessione() as conn:

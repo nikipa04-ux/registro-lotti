@@ -63,6 +63,14 @@ def test_fusione_uova_una_riga_sola(conn):
     assert nomi == ["Latte fresco", "Uova", "Zucchero"]
 
 
+def test_allergeni_doppia_fonte_una_volta_sola(conn):
+    # le uova arrivano DIRETTE e DENTRO la crema: si sommano le fonti
+    # ma in "Contiene (allergeni)" compare UNA volta sola
+    r = etichetta(conn, 2)
+    assert r["allergeni"] == ["Latte", "Uova"]
+    assert r["allergeni"].count("Uova") == 1
+
+
 def test_fallback_qta_prodotta_nulla_usa_la_resa(conn):
     # Se la produzione non ha dichiarato qta_prodotta, si scala sulla resa
     # della ricetta (stesso comportamento del prototipo)

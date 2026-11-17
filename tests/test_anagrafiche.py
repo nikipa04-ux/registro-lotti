@@ -9,6 +9,7 @@ from app.logic.anagrafiche import (
     dettaglio_prodotto,
     elimina_fornitore,
     elimina_prodotto,
+    garantisci_allergeni_di_legge,
     lista_ingredienti,
     lista_prodotti,
     rinomina_famiglia,
@@ -123,6 +124,27 @@ def test_allergeni_ereditati_con_ricorsione(conn):
     assert allergeni_da_ricetta(conn, 5) == []            # senza ricetta: niente
 
 
+def test_allergeni_sommati_senza_ripetizioni(conn):
+    # il Latte arriva al bignè da TRE strade: latte diretto, panna (che
+    # dichiara Latte) e la crema (che contiene latte): si SOMMANO le
+    # fonti ma l'allergene compare UNA volta sola
+    conn.execute(
+        "INSERT INTO prodotti (id, nome, conservazione, unita_misura) "
+        "VALUES (10, 'Panna', 'Frigo', 'lt')"
+    )
+    conn.execute(
+        "INSERT INTO prodotti_allergeni (prodotto_id, allergene_id) VALUES (10, 1)"
+    )
+    conn.execute(
+        "INSERT INTO ricette_righe (ricetta_id, ingrediente_id, quantita) "
+        "VALUES (11, 10, 0.5), (11, 1, 1)"
+    )
+    conn.commit()
+    ereditati = allergeni_da_ricetta(conn, 4)
+    assert ereditati == ["Latte"]
+    assert ereditati.count("Latte") == 1
+
+
 def test_lista_prodotti_mostra_gli_allergeni_ereditati(conn):
     per_nome = {p["nome"]: p for p in lista_prodotti(conn)}
     assert per_nome["Bignè"]["allergeni"] == ["Latte"]
@@ -155,6 +177,32 @@ def test_crea_ingrediente_validazioni(conn):
                          da_anagrafica=False)
 
 
+def test_crea_ingrediente_rapido_salva_gli_allergeni(conn):
+    # il "➕ Nuovo ingrediente" del form arrivi: gli allergeni si
+    # dichiarano già lì, non si aspetta la scheda anagrafica
+    p = crea_ingrediente(conn, {"nome": "Pasta sfoglia pronta",
+                                "conservazione": "Freezer",
+                                "unita_misura": "kg",
+                                "allergeni": [1, 2]}, da_anagrafica=False)
+    assert p["tipo"] == "ingrediente"
+    assert [a["nome"] for a in p["allergeni"]] == ["Latte", "Uova"]
+
+
+# ---- allergeni di legge: i 14 del Reg. UE 1169/2011 ----
+
+def test_garantisci_allergeni_di_legge_senza_duplicati(conn):
+    # anche su un DB nato col vecchio seed demo a 4 allergeni:
+    # chi manca si aggiunge, chi c'è resta con il suo id
+    garantisci_allergeni_di_legge(conn)
+    n = conn.execute("SELECT COUNT(*) AS n FROM allergeni").fetchone()["n"]
+    assert n == 14
+    assert conn.execute(
+        "SELECT id FROM allergeni WHERE nome = 'Latte'"
+    ).fetchone()["id"] == 1
+    garantisci_allergeni_di_legge(conn)      # idempotente
+    assert conn.execute("SELECT COUNT(*) AS n FROM allergeni").fetchone()["n"] == 14
+
+
 # ---- modifica ingrediente ----
 
 def test_salva_ingrediente_sostituisce_gli_allergeni(conn):
@@ -185,6 +233,13 @@ def test_salva_prodotto_lab_modifica_nome_e_sigla(conn):
     assert p["nome"] == "Crema pasticcera"
     assert p["sigla"] == "CRM"          # le sigle dei lotti sono MAIUSCOLE
     assert p["famiglia"] == "Creme"     # resta quella della ricetta (master)
+
+
+def test_salva_prodotto_lab_um_opzionale(conn):
+    # l'u.m. del prodotto NON serve più: se il salvataggio non la manda,
+    # resta quella storica (i vecchi dati non si buttano via)
+    p = salva_prodotto(conn, {"id": 3, "nome": "Crema pasticcera", "sigla": "CRM"})
+    assert p["unita_misura"] == "kg"
 
 
 # ---- dettagli ----

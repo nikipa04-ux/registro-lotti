@@ -12,6 +12,7 @@ import sys
 from datetime import date, timedelta
 
 from .db import inizializza
+from .logic.anagrafiche import ALLERGENI_DI_LEGGE
 from .logic.lotti import genera_codice
 
 OGGI = date.today()
@@ -34,10 +35,12 @@ def seed(conn):
             "INSERT INTO fornitori (nome, piva, telefono, email, note) "
             "VALUES (?, ?, ?, ?, ?)", (nome, piva, tel, email, note))
 
-    # ---- Allergeni (i 14 obbligatori, qui i soliti 4 della demo) ----
-    allergeni = ["Latte", "Uova", "Frutta a guscio", "Sesamo"]
-    for a in allergeni:
-        conn.execute("INSERT INTO allergeni (nome) VALUES (?)", (a,))
+    # ---- Allergeni: i 14 obbligatori da etichetta (Reg. UE 1169/2011) ----
+    for nome, descrizione in ALLERGENI_DI_LEGGE:
+        conn.execute(
+            "INSERT INTO allergeni (nome, descrizione) VALUES (?, ?)",
+            (nome, descrizione),
+        )
 
     # ---- Famiglie dei prodotti di laboratorio ----
     for f in ["Creme", "Dolci finiti"]:
