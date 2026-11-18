@@ -567,7 +567,10 @@ function renderProduzioni(righe) {
   const corpo = righe.map(r =>
     '<tr data-id="' + r.id + '">' +
     "<td><b>" + esc(r.prodotto) + "</b>" +
-    (r.famiglia ? ' <span class="badge b-gray">' + esc(r.famiglia) + "</span>" : "") + "</td>" +
+    (r.famiglia ? ' <span class="badge b-gray">' + esc(r.famiglia) + "</span>" : "") +
+    (r.ricetta_modificata
+      ? ' <span class="badge b-amber" title="Rispetto alla ricetta master il verbale ha ingredienti in più o in meno (snapshot al momento della produzione)">✏️ ricetta modificata</span>'
+      : "") + "</td>" +
     "<td class='mono'>" + esc(r.codice_lotto) + "</td>" +
     "<td>" + esc(r.data_produzione) + "</td>" +
     '<td class="td-scad">' + badgeScadenza(r) + "</td>" +
@@ -629,7 +632,10 @@ async function apriDettaglioProduzione(id) {
       : "<p class='muted'>Nessun allergene dichiarato dagli ingredienti usati.</p>";
     $("dettaglio-produzione-testo").innerHTML =
       "<div class='det-riga'><span>Prodotto</span><b>" + esc(l.prodotto) +
-      (l.famiglia ? ' <span class="badge b-gray">' + esc(l.famiglia) + "</span>" : "") + "</b></div>" +
+      (l.famiglia ? ' <span class="badge b-gray">' + esc(l.famiglia) + "</span>" : "") +
+      (l.ricetta_modificata
+        ? ' <span class="badge b-amber" title="Rispetto alla ricetta master il verbale ha ingredienti in più o in meno (snapshot al momento della produzione)">✏️ ricetta modificata</span>'
+        : "") + "</b></div>" +
       "<div class='det-riga'><span>Lotto interno</span><b class='mono'>" + esc(l.codice_lotto) + "</b> (generato dal server)</div>" +
       "<div class='det-riga'><span>Data produzione</span><b>" + esc(l.data_produzione) +
       (l.qta_prodotta != null ? " · " + fmt(l.qta_prodotta) + " " + esc(l.um || "") : "") + "</b></div>" +
@@ -830,6 +836,14 @@ function renderRighe() {
     return;
   }
   let html = "";
+  // Live: il verbale sta divergendo dalla ricetta master? Le quantità
+  // corrette non contano, contano gli ingredienti aggiunti/esclusi.
+  const nAggiunte = RIGHE.filter(r => r.fonte === "aggiunta" && r.nome).length;
+  const nEscluse = (PROPOSTA.righe || []).filter((_, i) => !RIGHE[i] || !RIGHE[i].attiva).length;
+  if (nAggiunte + nEscluse > 0)
+    html += '<div class="warn" style="margin:0 0 10px">✏️ Verbale diverso dalla ricetta master (' +
+      nAggiunte + " aggiunto/i, " + nEscluse +
+      " escluso/i): questo lotto verrà marcato «ricetta modificata».</div>";
   PROPOSTA.righe.forEach((r, i) => {
     const riga = RIGHE[i];
     if (!riga.attiva) {
@@ -1510,7 +1524,6 @@ function renderRigheRicette() {
       '<button class="btn sec mini rosso" data-rdel="' + i + '" title="Rimuovi riga">✕</button>' +
       "</div></div>";
   });
-  html += '<button class="btn sec" id="nr-aggiungi">+ Aggiungi ingrediente</button>';
   cont.innerHTML = html;
 
   cont.querySelectorAll("[data-rsel]").forEach(sel =>
@@ -1532,8 +1545,6 @@ function renderRigheRicette() {
       RIGHE_R.splice(Number(btn.dataset.rdel), 1);
       renderRigheRicette();
     }));
-  const agg = cont.querySelector("#nr-aggiungi");
-  if (agg) agg.addEventListener("click", aggiungiRigaR);
 }
 
 function mostraErroreRicetta(testo) {
@@ -1630,6 +1641,9 @@ function flashRicette(testo) {
 }
 
 $("btn-nuova-ricetta").addEventListener("click", () => apriFormRicetta(null));
+// ➕ Aggiungi ingrediente: STATICO, staccato dalla tab delle righe, così
+// resta visibile anche dopo aver eliminato tutte le righe (prima spariva)
+$("nr-aggiungi").addEventListener("click", aggiungiRigaR);
 $("nr-annulla").addEventListener("click", chiudiFormRicetta);
 $("nr-salva").addEventListener("click", salvaRicetta);
 $("overlay-ricetta").addEventListener("click", (e) => { if (e.target === e.currentTarget) chiudiFormRicetta(); });

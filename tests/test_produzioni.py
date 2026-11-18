@@ -293,3 +293,47 @@ def test_elimina_produzione_protetta_se_usata_da_altra_produzione(conn):
     assert residui == {"UOV-A": 10.0}
     n = conn.execute("SELECT COUNT(*) FROM lotti_interni").fetchone()[0]
     assert n == 1  # solo la crema
+
+
+# ---- ricetta modificata: snapshot al momento del verbale ----
+
+def test_produzione_che_segue_la_ricetta_non_e_marcata(conn):
+    lotto = registra_produzione(conn, produzione_crema())
+    assert lotto["ricetta_modificata"] == 0
+
+
+def test_ingrediente_aggiunto_fuori_ricetta_marca_il_lotto(conn):
+    lotto = registra_produzione(conn, produzione_crema(
+        consumi=[
+            {"origine": "ingresso", "lotto_origine_id": 100, "quantita_usata": 1.5},
+            {"origine": "ingresso", "lotto_origine_id": 101, "quantita_usata": 0.5},
+            # "UOV-A": le uova NON sono negli ingredienti della crema
+            {"origine": "ingresso", "lotto_origine_id": 102, "quantita_usata": 1},
+        ],
+    ))
+    assert lotto["ricetta_modificata"] == 1
+
+
+def test_riga_di_ricetta_esclusa_marca_il_lotto(conn):
+    # il bignè (ricetta: crema + uova) prodotto consumando SOLO la crema
+    crema = registra_produzione(conn, produzione_crema())
+    bigne = registra_produzione(conn, {
+        "prodotto_id": 4,
+        "data_produzione": OGGI,
+        "data_scadenza": "2026-11-24",
+        "qta_prodotta": 40,
+        "consumi": [
+            {"origine": "interno", "lotto_origine_id": crema["id"], "quantita_usata": 1},
+        ],
+    })
+    assert bigne["ricetta_modificata"] == 1
+
+
+def test_migrazione_colonna_idempotente_sui_db_nati_prima():
+    c = db.connessione(":memory:")
+    c.execute("CREATE TABLE prova (id INTEGER)")
+    db.garantisci_colonna(c, "prova", "extra", "INTEGER NOT NULL DEFAULT 0")
+    db.garantisci_colonna(c, "prova", "extra", "INTEGER NOT NULL DEFAULT 0")
+    c.execute("INSERT INTO prova (id, extra) VALUES (1, 1)")
+    assert c.execute("SELECT extra FROM prova").fetchone()["extra"] == 1
+    c.close()

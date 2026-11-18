@@ -161,6 +161,11 @@ La sezione in cui nascono i lotti interni (semilavorati e dolci finiti).
 La produzione è SLAVE della ricetta MASTER: la proposta parte dalle righe
 della ricetta, l'operatore al massimo corregge.
 
+- **Ricetta modificata**: se il verbale usa un insieme di ingredienti DIVERSO
+  dalla ricetta master (uno aggiunto o una riga esclusa; le quantità corrette
+  non contano), il form lo dice subito e il lotto interno resta marcato
+  «✏️ ricetta modificata» in lista e dettaglio (snapshot al verbale: la
+  ricetta può cambiare dopo, il lotto dice com'è andata quel giorno)
 - **Ricerca** per prodotto o lotto interno + contatore; tabella demo:
   prodotto + famiglia in badge, lotto mono, data produzione, scadenza
   colorata, "N lotti usati"

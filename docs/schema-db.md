@@ -87,7 +87,13 @@ CREATE TABLE lotti_interni (
                                        -- il verbale, denominazioni e allergeni si calcolano)
     codice_lotto TEXT NOT NULL UNIQUE,   -- auto-generato: es. CRP-20261112-01
     data_produzione TEXT NOT NULL,
-    data_scadenza TEXT NOT NULL
+    data_scadenza TEXT NOT NULL,
+    ricetta_modificata INTEGER NOT NULL DEFAULT 0,  -- SNAPSHOT al verbale: 1 se gli ingredienti
+                                                    -- usati differiscono dalla ricetta master
+                                                    -- (aggiunti/esclusi; le quantità non contano).
+                                                    -- Colonna nata dopo la v0: i DB esistenti
+                                                    -- se la ritrovano con la migrazione di
+                                                    -- garantisci_colonna() a ogni avvio
 );
 
 -- Consumo: quale lotto è stato usato in quale produzione

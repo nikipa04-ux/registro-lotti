@@ -79,7 +79,11 @@ CREATE TABLE IF NOT EXISTS lotti_interni (
                                      -- esatta degli ingredienti dei lotti interni consumati
     codice_lotto TEXT NOT NULL UNIQUE,  -- auto-generato: SIGLA-AAAAMMGG-NN
     data_produzione TEXT NOT NULL,
-    data_scadenza TEXT NOT NULL
+    data_scadenza TEXT NOT NULL,
+    -- SNAPSHOT al verbale: 1 se gli ingredienti USATI differiscono
+    -- dalla ricetta master (aggiunti o esclusi; le quantità corrette
+    -- non contano)
+    ricetta_modificata INTEGER NOT NULL DEFAULT 0
 );
 
 -- Consumo: quale lotto è stato usato in quale produzione.
