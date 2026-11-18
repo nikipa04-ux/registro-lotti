@@ -21,6 +21,7 @@
       <button class="disabled" title="Prossimo capitolo">⏰ Scadenze<small>presto</small></button>
       <button class="disabled" title="Prossimo capitolo">📦 Magazzino<small>presto</small></button>
       <button data-sez="anagrafiche">📇 Anagrafiche</button>
+      <button data-sez="produttore">🏠 Produttore</button>
     </nav>
   </aside>
 
@@ -174,6 +175,51 @@
       <div class="card" id="dettaglio-arrivo" hidden>
         <h2>Dettaglio lotto in ingresso <button class="chiudi" id="chiudi-dettaglio">✕</button></h2>
         <div id="dettaglio-arrivo-testo"><div class="loading">carico i dati…</div></div>
+      </div>
+    </section>
+
+    <!-- ======================== PRODUTTORE ======================== -->
+    <section id="sez-produttore" hidden>
+      <h1>Produttore</h1>
+      <p class="sub">Ragione sociale e indirizzo della tua attività: finiscono
+      sull'etichetta che accompagna il prodotto (Reg. UE 1169/2011 chiede
+      chi ha confezionato e dove). Se non li compili, l'etichetta resta senza.</p>
+
+      <div class="card">
+        <h2>La mia attività</h2>
+        <div class="f-campo">
+          <label for="prod-ragione">Ragione sociale</label>
+          <input id="prod-ragione" type="text" autocomplete="off" maxlength="80"
+                 placeholder="es. Pasticceria Dolce Vita di N. Panichi">
+        </div>
+        <div class="f-campo">
+          <label for="prod-indirizzo">Indirizzo (facoltativo)</label>
+          <input id="prod-indirizzo" type="text" autocomplete="off" maxlength="120"
+                 placeholder="es. Via Roma 12, 00100 Roma">
+        </div>
+        <div id="prod-errore" class="f-errore" hidden></div>
+        <div class="f-azioni">
+          <button class="btn" id="prod-salva">💾 Salva</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Anteprima dal vivo dell'etichetta</h2>
+        <p class="muted">Il contenuto è un esempio; ragione sociale e indirizzo sono i tuoi,
+        aggiornati mentre scrivi. È così che la cella esce dal PDF.</p>
+        <div class="anteprima-fogli">
+          <div class="anteprima-cell">
+            <div class="ant-ragione" id="ant-ragione"></div>
+            <div class="ant-nome">Bignè della casa</div>
+            <div class="ant-riga">Lotto: <span class="mono">BIG-20261118-01</span></div>
+            <div class="ant-riga">Prodotto il: 2026-11-18&nbsp;&nbsp;Scade il: 2026-11-25</div>
+            <div class="ant-tit">Ingredienti</div>
+            <div class="ant-ing">Farina di grano tenero tipo 00, uova fresche di gallina,
+            burro, zucchero, latte intero fresco pastorizzato, lievito per dolci</div>
+            <div class="ant-all">Contiene: Cereali con glutine, Latte, Uova</div>
+            <div class="ant-indirizzo" id="ant-indirizzo"></div>
+          </div>
+        </div>
       </div>
     </section>
 

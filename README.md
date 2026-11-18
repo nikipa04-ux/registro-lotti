@@ -20,6 +20,7 @@ registro-lotti/
 │   │   ├── arrivi.py      #   lotti in ingresso: lista, dettaglio, registrazione
 │   │   ├── produzioni.py  #   lotti interni, consumi, etichetta calcolata
 │   │   ├── ricette.py     #   il master: crea e corregge le ricette
+│   │   ├── impostazioni.py  #   dati dell'attività (produttore)
 │   │   ├── magazzino.py   #   giacenze, scadenze
 │   │   └── dashboard.py   #   quadro riassuntivo del giorno
 │   ├── logic/             # LOGICA DI BUSINESS (funzioni pure, testabili)
@@ -31,6 +32,7 @@ registro-lotti/
 │   │   ├── ricette.py     #   il master: upsert ricetta, famiglia, righe
 │   │   ├── etichetta.py   #   lista ingredienti calcolata dai consumi
 │   │   ├── etichetta_pdf.py  # il PDF a griglia del foglio A4 (solo stdlib)
+│   │   ├── impostazioni.py  #   dati del produttore (chi firma l'etichetta)
 │   │   ├── foodcost.py    #   costi: storico prezzi dagli arrivi
 │   │   └── dashboard.py   #   scadenze imminenti e contatori
 │   └── ui/                # interfaccia reale (dashboard + arrivi + produzioni)
@@ -172,7 +174,10 @@ della ricetta, l'operatore al massimo corregge.
   dalla SOLA libreria standard Python: nessuna dipendenza nuova, font
   Helvetica/Courier di base con accenti italiani (à è ì ò ù é). Ogni
   etichetta accompagna il prodotto: nome, lotto interno, prodotto il /
-  scade il, ingredienti calcolati, allergeni in neretto (tutto nero) se presenti.
+  scade il, ingredienti calcolati, allergeni in neretto (tutto nero) se
+  presenti; in cima la RAGIONE SOCIALE dell'attività e in fondo
+  l'indirizzo, se compilati nella sezione Produttore (Reg. UE 1169/2011:
+  l'etichetta dichiara chi ha prodotto e dove).
   + bottone "🗑 Elimina" (annulla il verbale e ripristina le giacenze);
   il contenuto scrolla DENTRO la card (intestazione fissa, azioni sempre
   visibili)
@@ -315,6 +320,24 @@ ricetta (qui NON si tocca, al massimo la si apre).
   `/prodotti/{id}`, `/fornitori/{id}`, PUT prodotti/fornitori/famiglie
   (rinomina), DELETE prodotti/fornitori, POST `/ingredienti` (dal modulo,
   con denominazione obbligatoria).
+
+### Produttore
+
+La pagina dei dati dell'attività che produce: **ragione sociale** e
+**indirizzo** finiscono sull'etichetta PDF (in cima e in fondo alla
+cella). Il produttore è UNO: niente anagrafica a più righe, una tabella
+`impostazioni` chiave/valore che crescerà con le esigenze (logo e altro
+più avanti).
+
+- **Card "La mia attività"**: ragione sociale + indirizzo (facoltativo),
+  salvataggio immediato (`PUT /api/impostazioni`, GET per leggerli)
+- **Anteprima dal vivo dell'etichetta**: una cella uguale a quella che
+  esce dal PDF (bordo tratteggiato = guida di taglio, monocromatica);
+  mentre scrivi la ragione sociale e l'indirizzo si aggiornano al loro
+  posto; il resto del contenuto è d'esempio
+- Se i dati non sono compilati, l'etichetta esce senza le righe del
+  produttore: niente di obbligatorio
+- Endpoint: GET/PUT `/api/impostazioni`
 
 ## Pubblicazione su GitHub (GitHub Desktop)
 

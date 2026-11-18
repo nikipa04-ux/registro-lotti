@@ -136,3 +136,14 @@ CREATE INDEX IF NOT EXISTS idx_lotti_ingresso_scadenza ON lotti_ingresso(data_sc
 CREATE INDEX IF NOT EXISTS idx_lotti_interni_scadenza ON lotti_interni(data_scadenza);
 CREATE INDEX IF NOT EXISTS idx_consumi_interno ON consumi(lotto_interno_id);
 CREATE INDEX IF NOT EXISTS idx_consumi_origine ON consumi(origine, lotto_origine_id);
+
+-- ============================================================
+--  Impostazioni: i dati dell'ATTIVITÀ che produce (chi firma le etichette)
+-- ============================================================
+-- Chiavi note: 'produttore_ragione_sociale', 'produttore_indirizzo'. Il
+-- produttore è UNO (la pasticceria), ma la tabella generica resta aperta
+-- per ciò che verrà (copie di default, formato etichetta...).
+CREATE TABLE IF NOT EXISTS impostazioni (
+    chiave TEXT PRIMARY KEY,
+    valore TEXT
+);

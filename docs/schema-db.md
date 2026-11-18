@@ -146,6 +146,22 @@ Nota v0.2 potenziale: aggiungere `shelf_life_giorni` alla ricetta/prodotto per c
 - Un lotto senza allegati è perfettamente valido; l'allegato arricchisce il lotto, mai prerequisito.
 - Per i documenti solo cartacei, il campo `riferimento_cartaceo` (testo libero) permette di lasciare traccia della collocazione fisica senza digitalizzazione.
 
+## Impostazioni (aggiunta successiva, novembre 2026)
+
+I dati dell'**attività che produce**: ragione sociale e indirizzo finiscono
+sull'etichetta PDF (Reg. UE 1169/2011). Il produttore è UNO, ma la tabella
+chiave/valore resta generica per le impostazioni future (logo, copie di
+default del PDF...). Se una chiave non esiste, il suo valore è stringa vuota
+e l'etichetta semplicemente non porta la riga.
+
+```sql
+CREATE TABLE IF NOT EXISTS impostazioni (
+    chiave TEXT PRIMARY KEY,
+    valore TEXT
+);
+-- chiavi note: 'produttore_ragione_sociale', 'produttore_indirizzo'
+```
+
 ## Indici per le query di tracciabilità
 
 ```sql

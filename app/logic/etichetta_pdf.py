@@ -11,6 +11,7 @@ Courier-Bold) con WinAnsiEncoding: le lettere accentate italiane
 (à è ì ò ù é) viaggiano in cp1252, niente font da installare.
 
 Contenuto di ogni etichetta (i dati CALCOLATI, nessuno snapshot):
+  - ragione sociale dell'attività, in cima (chi produce: Reg. UE 1169/2011)
   - nome del prodotto
   - lotto interno (codice generato dal server)
   - prodotto il / scade il
@@ -20,6 +21,10 @@ Contenuto di ogni etichetta (i dati CALCOLATI, nessuno snapshot):
   - allergeni: "Contiene:" in neretto, TUTTO NERO su richiesta di
     Nicolas (18/11): l'etichetta stampata resta monocromatica,
     solo se ce ne sono
+  - indirizzo dell'attività, in piccolo in fondo
+
+Se ragione sociale e indirizzo non sono stati compilati (sezione
+Produttore), le righe spariscono: l'etichetta resta quella che è.
 """
 
 import unicodedata
@@ -122,12 +127,20 @@ def _blocchi_etichetta(dati, scala, max_larg):
 
     Ogni riga di blocco è già spezzata per la larghezza utile della cella.
     """
+    blocchi = []
+    # chi produce: la ragione sociale sta IN CIMA all'etichetta
+    if dati["ragione_sociale"]:
+        blocchi.append((
+            "F2", 10.0 * scala,
+            _spezza(dati["ragione_sociale"], "F2", 10.0 * scala, max_larg),
+            None,
+        ))
     nome = _spezza(dati["prodotto"], "F2", 13 * scala, max_larg)
     ing = _spezza(
         ", ".join(r["denominazione"] for r in dati["righe"]),
         "F1", 8.2 * scala, max_larg,
     )
-    blocchi = [
+    blocchi = blocchi + [
         ("F2", 13 * scala, nome, None),
         ("F1", 9.0 * scala,
          ["Lotto: " + dati["codice_lotto"]], None),
@@ -142,10 +155,17 @@ def _blocchi_etichetta(dati, scala, max_larg):
             "Contiene: " + ", ".join(dati["allergeni"]),
             "F2", 8.8 * scala, max_larg,
         )
-        # NERO anche gli allergeni (richiesta di Nicolas): il colore è
-        # solo del cicchetto, non serve alla stampa
-        blocchi.append(
-            ("F2", 8.8 * scala, contiene, None))
+        # NERO anche gli allergeni (richiesta di Nicolas): la stampa è
+        # monocromatica, il rosso non serve
+        blocchi.append((
+            "F2", 8.8 * scala, contiene, None))
+    # e dove trovarlo: l'indirizzo chiude l'etichetta, piccolo
+    if dati["indirizzo_produttore"]:
+        blocchi.append((
+            "F1", 7.5 * scala,
+            _spezza(dati["indirizzo_produttore"], "F1", 7.5 * scala, max_larg),
+            None,
+        ))
     return blocchi
 
 
@@ -188,6 +208,8 @@ def etichetta_pdf(conn, lotto_interno_id, copie=8):
     from .etichetta import etichetta
 
     comp = etichetta(conn, lotto_interno_id)
+    from .impostazioni import leggi_produttore
+    produttore = leggi_produttore(conn)
     dati = {
         "prodotto": lotto["prodotto"],
         "codice_lotto": lotto["codice_lotto"],
@@ -195,6 +217,8 @@ def etichetta_pdf(conn, lotto_interno_id, copie=8):
         "data_scadenza": lotto["data_scadenza"],
         "righe": comp["righe"],
         "allergeni": comp["allergeni"],
+        "ragione_sociale": produttore["ragione_sociale"],
+        "indirizzo_produttore": produttore["indirizzo"],
     }
 
     if copie < 1:

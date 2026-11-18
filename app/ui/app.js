@@ -41,6 +41,7 @@ function mostraSezione(nome) {
     if (nome === "produzioni") avviaProduzioni();
     if (nome === "ricette") avviaRicette();
     if (nome === "anagrafiche") avviaAnagrafiche();
+    if (nome === "produttore") avviaProduttore();
   }
 }
 
@@ -2537,5 +2538,55 @@ $("fam-nuova-aggiungi").addEventListener("click", async () => {
     anagCombosRivedonoIlMondo();
   } catch (e) {
     mostraErroreFamiglia("Il server non risponde.");
+  }
+});
+
+/* ========================= PRODUTTORE ========================= */
+
+async function avviaProduttore() {
+  try {
+    const r = await fetch("/api/impostazioni");
+    const dati = await r.json();
+    $("prod-ragione").value = dati.ragione_sociale || "";
+    $("prod-indirizzo").value = dati.indirizzo || "";
+  } catch (e) {
+    // server giù: i campi restano vuoti, l'utente riprova a salvare dopo
+  }
+  aggiornaAnteprimaProduttore();
+}
+
+function aggiornaAnteprimaProduttore() {
+  const ragione = $("prod-ragione").value.trim();
+  const indirizzo = $("prod-indirizzo").value.trim();
+  // l'anteprima parla subito: mostra il posto che i dati vanno a occupare
+  $("ant-ragione").textContent = ragione || "(ragione sociale)";
+  $("ant-ragione").classList.toggle("muted", !ragione);
+  $("ant-indirizzo").textContent = indirizzo || "(indirizzo)";
+  $("ant-indirizzo").classList.toggle("muted", !indirizzo);
+}
+
+$("prod-ragione").addEventListener("input", aggiornaAnteprimaProduttore);
+$("prod-indirizzo").addEventListener("input", aggiornaAnteprimaProduttore);
+
+$("prod-salva").addEventListener("click", async () => {
+  const bottone = $("prod-salva");
+  bottone.disabled = true;
+  try {
+    const r = await fetch("/api/impostazioni", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ragione_sociale: $("prod-ragione").value,
+        indirizzo: $("prod-indirizzo").value,
+      }),
+    });
+    if (!r.ok) throw new Error("errore http");
+    $("prod-errore").hidden = true;
+    bottone.textContent = "✔ Salvato";
+    setTimeout(() => { bottone.textContent = "💾 Salva"; bottone.disabled = false; }, 1500);
+  } catch (e) {
+    $("prod-errore").textContent = "Il server non risponde.";
+    $("prod-errore").hidden = false;
+    bottone.disabled = false;
   }
 });
