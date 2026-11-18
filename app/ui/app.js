@@ -69,7 +69,7 @@ function renderScadenze(righe) {
   const corpo = righe.map(r =>
     "<tr><td><b>" + esc(r.prodotto) + "</b><br><span class='mono'>" + esc(r.lotto) + "</span></td>" +
     "<td>" + esc(r.fornitore) + "</td>" +
-    "<td>" + badgeScadenza(r) + "</td></tr>").join("");
+    '<td class="td-scad">' + badgeScadenza(r) + "</td></tr>").join("");
   $("tabella-scadenze").innerHTML =
     "<table><tr><th>Prodotto</th><th>Origine</th><th>Scadenza</th></tr>" + corpo + "</table>";
 }
@@ -157,7 +157,7 @@ function renderArrivi(dati) {
       "<td class='mono'>" + esc(r.codice_lotto) + "</td>" +
       "<td>" + esc(r.fornitore) + "</td>" +
       "<td>" + esc(r.data_arrivo) + "</td>" +
-      "<td>" + badgeScadenza(r) + "</td>" +
+      '<td class="td-scad">' + badgeScadenza(r) + "</td>" +
       "<td>" + fmt(r.quantita) + "\u00A0" + esc(r.um || "") + "</td>" +
       prezzi + "</tr>";
   }).join("");
@@ -570,7 +570,7 @@ function renderProduzioni(righe) {
     (r.famiglia ? ' <span class="badge b-gray">' + esc(r.famiglia) + "</span>" : "") + "</td>" +
     "<td class='mono'>" + esc(r.codice_lotto) + "</td>" +
     "<td>" + esc(r.data_produzione) + "</td>" +
-    "<td>" + badgeScadenza(r) + "</td>" +
+    '<td class="td-scad">' + badgeScadenza(r) + "</td>" +
     "<td>" + r.n_consumi + " lotti usati</td></tr>").join("");
   $("tabella-produzioni").innerHTML =
     "<table><tr><th>Prodotto</th><th>Lotto interno</th><th>Data produzione</th>" +
@@ -2046,7 +2046,7 @@ function rigaArrivi(arrivi) {
         arrivi.map(a =>
           '<tr class="vai-arrivo" data-arrivo="' + a.id + '"><td class="mono">' + esc(a.codice_lotto) + "</td>" +
           "<td>" + esc(a.prodotto) + "</td><td>" + esc(a.data_arrivo) + "</td>" +
-          "<td>" + badgeScadenza(a) + "</td><td>" + fmt(a.quantita) + " " + esc(a.um || "") + "</td>" +
+          '<td class="td-scad">' + badgeScadenza(a) + "</td><td>" + fmt(a.quantita) + " " + esc(a.um || "") + "</td>" +
           '<td class="num"><b>' + eur(a.totale_iva) + "</b></td></tr>"
         ).join("") + "</table>"
       : '<p class="muted">Nessun arrivo registrato.</p>');
@@ -2058,7 +2058,7 @@ function rigaProduzioni(produzioni) {
       ? "<table><tr><th>Lotto interno</th><th>Data produzione</th><th>Scadenza</th><th>Q.tà</th></tr>" +
         produzioni.map(l =>
           '<tr class="vai-produzione" data-produzione="' + l.id + '"><td class="mono">' + esc(l.codice_lotto) + "</td>" +
-          "<td>" + esc(l.data_produzione) + "</td><td>" + badgeScadenza(l) + "</td>" +
+          "<td>" + esc(l.data_produzione) + "</td>" + '<td class="td-scad">' + badgeScadenza(l) + "</td>" +
           "<td>" + fmt(l.qta_prodotta) + " " + esc(l.um || "") + "</td></tr>"
         ).join("") + "</table>"
       : '<p class="muted">Nessuna produzione registrata.</p>');

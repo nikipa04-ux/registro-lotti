@@ -270,6 +270,18 @@ ol.etichetta li { margin-bottom: 3px; }
   padding: 10px 0 2px; margin-bottom: 0;
 }
 
+/* Scadenza su UNA riga nella scheda anagrafica: nelle tabelle "Arrivi
+   recenti" e "Produzioni recenti" il badge (es. "2026-11-25 · 3g") non deve
+   andare a capo; con il nowrap la colonna si allarga da sola per contenerlo. */
+#dettaglio-anagrafica-testo .badge { white-space: nowrap; }
+
+/* RIFORMA COLONNA SCADENZA: più larga, sempre. Le celle con classe td-scad
+   non vanno mai a capo e hanno uno spazio minimo garantito, così la data
+   non finisce compressa nemmeno nelle tabelle con molte colonne (Arrivi,
+   Produzioni, dashboard e scheda anagrafica). Nelle tabelle strette si
+   scorre in orizzontale, come fa già #tabella-arrivi. */
+td.td-scad { white-space: nowrap; min-width: 140px; }
+
 /* Scheda anagrafica come PANNELLO LATERALE DESTRO: sui monitor larghi la
    colonna dei contenuti (nav 220 + max 1000px) arriva a x=1220 e a destra
    resta spazio vuoto: lì si apre la scheda, ANCORATA alle card
