@@ -9,8 +9,7 @@
 <body>
 <div class="layout">
 
-  <!-- Navigazione (stessa del prototipo). Le sezioni non ancora costruite
-       restano disabilitate: si accendono una capitolo alla volta. -->
+  <!-- Navigazione (stessa del prototipo). -->
   <aside>
     <div class="logo">Registro Lotti<small>gestione lotti e scadenze</small></div>
     <nav>
@@ -18,8 +17,8 @@
       <button data-sez="arrivi">📥 Arrivi</button>
       <button data-sez="produzioni">🏭 Produzioni</button>
       <button data-sez="ricette">📋 Ricette</button>
-      <button class="disabled" title="Prossimo capitolo">⏰ Scadenze<small>presto</small></button>
-      <button class="disabled" title="Prossimo capitolo">📦 Magazzino<small>presto</small></button>
+      <button data-sez="scadenze">⏰ Scadenze</button>
+      <button data-sez="magazzino">📦 Magazzino</button>
       <button data-sez="anagrafiche">📇 Anagrafiche</button>
       <button data-sez="produttore">🏠 Produttore</button>
     </nav>
@@ -188,6 +187,62 @@
       <div class="card" id="dettaglio-arrivo" hidden>
         <h2>Dettaglio lotto in ingresso <button class="chiudi" id="chiudi-dettaglio">✕</button></h2>
         <div id="dettaglio-arrivo-testo"><div class="loading">carico i dati…</div></div>
+      </div>
+    </section>
+
+    <!-- ======================= SCADENZE ======================= -->
+    <section id="sez-scadenze" hidden>
+      <h1>Scadenze</h1>
+      <p class="sub">Tutti i lotti ordinati per urgenza, ingredienti e prodotti
+      separati. La finestra di default è 7 giorni; i lotti scaduti ma
+      ancora in casa si vedono solo col filtro "Scaduti": vanno buttati,
+      non nascosti. Clic su una riga per aprire il dettaglio del lotto.</p>
+
+      <div class="toolbar filtri">
+        <select id="scad-finestra">
+          <option value="3">Entro 3 giorni</option>
+          <option value="7" selected>Entro 7 giorni</option>
+          <option value="30">Entro 30 giorni</option>
+          <option value="all">Tutte le scadenze</option>
+          <option value="scad">Scaduti</option>
+        </select>
+        <span id="contatore-scad" class="muted"></span>
+      </div>
+
+      <div class="card card-larga">
+        <h2>🛒 Ingredienti in scadenza</h2>
+        <input id="cerca-scad-ing" type="search"
+               placeholder="Cerca ingrediente, marca, lotto, fornitore…">
+        <div id="tabella-scad-ing"><div class="loading">carico i dati…</div></div>
+      </div>
+
+      <div class="card card-larga">
+        <h2>🥣 Prodotti in scadenza</h2>
+        <input id="cerca-scad-pro" type="search"
+               placeholder="Cerca prodotto o lotto interno…">
+        <div id="tabella-scad-pro"><div class="loading">carico i dati…</div></div>
+      </div>
+    </section>
+
+    <!-- ======================= MAGAZZINO ======================= -->
+    <section id="sez-magazzino" hidden>
+      <h1>Magazzino</h1>
+      <p class="sub">Giacenze calcolate dagli arrivi meno i consumi: niente si scrive a mano.
+      La copertura dice quanti giorni l'ingrediente dura ancora al ritmo attuale;
+      sotto i 7 giorni finisce in "Da ordinare" (rosso sotto i 3).</p>
+
+      <div class="toolbar">
+        <div class="chip-filtri" id="mag-chips"></div>
+      </div>
+
+      <div class="card card-larga">
+        <h2>🛒 Da ordinare</h2>
+        <div id="mag-da-ordinare"><div class="loading">carico i dati…</div></div>
+      </div>
+
+      <div class="card card-larga">
+        <h2>📦 Giacenze e rifornimenti</h2>
+        <div id="tabella-magazzino"><div class="loading">carico i dati…</div></div>
       </div>
     </section>
 

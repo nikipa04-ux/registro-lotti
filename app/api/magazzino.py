@@ -1,45 +1,39 @@
 """Magazzino e scadenze: tutto CALCOLATO dalle registrazioni.
 
-Nessuna giacenza si inserisce a mano: è arrivo meno consumi.
+Nessuna giacenza si inserisce a mano: è arrivo meno consumi. Le regole di
+calcolo (consumo medio, copertura, finestre di scadenza) vivono in
+logic/magazzino.py, testate senza HTTP: qui si apre la connessione, si
+valida l'input e si delega.
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from ..db import connessione
+from ..logic.magazzino import FINESTRE, lista_scadenze, magazzino
 
 router = APIRouter(prefix="/api/magazzino", tags=["magazzino"])
 
 
 @router.get("")
 def giacenze():
-    """Giacenza per prodotto e marca: righe figlie quando ci sono più marche.
+    """Giacenze per prodotto e marca + statistiche di copertura.
 
-    TODO v0.1: chip filtro conservazione, colonna 'da ordinare'
-    (giacenza vs consumo medio della cadenza arrivi).
+    righe: una riga per prodotto+marca in giacenza (residua > 0);
+    stat: una riga per prodotto con almeno un arrivo, anche esenato
+          (giacenza 0: con consumo storico è "da ordinare").
     """
     with connessione() as conn:
-        return [dict(r) for r in conn.execute(
-            "SELECT p.id AS prodotto_id, p.nome, p.conservazione, "
-            "COALESCE(li.marca, p.marca, '—') AS marca, p.unita_misura AS um, "
-            "SUM(li.quantita_residua) AS giacenza, COUNT(li.id) AS n_lotti "
-            "FROM lotti_ingresso li JOIN prodotti p ON p.id = li.prodotto_id "
-            "WHERE li.quantita_residua > 0 "
-            "GROUP BY p.id, COALESCE(li.marca, p.marca, '—') "
-            "ORDER BY p.nome",
-        ).fetchall()]
+        return magazzino(conn)
 
 
 @router.get("/scadenze")
-def scadenze(giorni: int = 30):
-    """Lotti in ingresso che scadono entro N giorni, in ordine FEFO."""
+def scadenze(finestra: str = "7"):
+    """Lotti nella finestra di scadenza scelta, ordinati per urgenza.
+
+    finestra: '3' | '7' (default) | '30' | 'all' | 'scad' (solo scaduti,
+    con giacenza gli ingressi: vanno buttati, non nascosti).
+    """
+    if finestra not in FINESTRE:
+        raise HTTPException(
+            422, "Finestra non valida: scegli 3, 7, 30, all o scad")
     with connessione() as conn:
-        return [dict(r) for r in conn.execute(
-            "SELECT li.id, p.nome AS prodotto, li.marca, li.codice_lotto, "
-            "li.data_scadenza, li.quantita_residua, p.unita_misura AS um, f.nome AS fornitore "
-            "FROM lotti_ingresso li "
-            "JOIN prodotti p ON p.id = li.prodotto_id "
-            "JOIN fornitori f ON f.id = li.fornitore_id "
-            "WHERE li.quantita_residua > 0 "
-            "AND julianday(li.data_scadenza) <= julianday('now', ?) "
-            "ORDER BY li.data_scadenza",
-            (f"+{giorni} days",),
-        ).fetchall()]
+        return lista_scadenze(conn, finestra)

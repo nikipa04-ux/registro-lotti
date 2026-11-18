@@ -38,6 +38,8 @@ function mostraSezione(nome) {
   if (!sezioniCaricate[nome]) {
     sezioniCaricate[nome] = true;
     if (nome === "arrivi") avviaArrivi();
+    if (nome === "scadenze") avviaScadenze();
+    if (nome === "magazzino") avviaMagazzino();
     if (nome === "produzioni") avviaProduzioni();
     if (nome === "ricette") avviaRicette();
     if (nome === "anagrafiche") avviaAnagrafiche();
@@ -243,6 +245,8 @@ async function apriDettaglioArrivo(id) {
         flashArrivi("Arrivo eliminato.");
         caricaArrivi();
         sezioniCaricate.produzioni = false;
+        sezioniCaricate.magazzino = false;
+        sezioniCaricate.scadenze = false;
         sezioniCaricate.dashboard = false;
       } else {
         const c = await r.json();
@@ -518,6 +522,8 @@ async function salvaArrivo() {
     chiudiFormArrivo();
     flashArrivi("Lotto " + corpo.codice_lotto + " di " + corpo.prodotto + " registrato: ora è in magazzino.");
     caricaArrivi();
+    sezioniCaricate.magazzino = false;   // la giacenza è cambiata
+    sezioniCaricate.scadenze = false;
   } catch (e) {
     mostraErroreForm("Il server non risponde.");
   } finally {
@@ -533,6 +539,252 @@ function flashArrivi(testo) {
   f.hidden = false;
   clearTimeout(f._timer);
   f._timer = setTimeout(() => { f.hidden = true; }, 5000);
+}
+
+/* ========================= Scadenze ========================= */
+/* Il registro HACCP vero: chi scade prima viene prima. Le due card (arrivi
+   e produzioni) condividono la finestra del selettore, con ricerche
+   indipendenti. Gli scaduti si vedono SOLO col filtro "Scaduti" (scelta
+   di Nicolas): vanno buttati, non nascosti tra chi scade domani. */
+
+let SCAD_FINESTRA = "7";   // default 7 giorni (scelta di Nicolas, 18/11/2026)
+let SCAD_DATI = null;
+
+async function avviaScadenze() {
+  caricaScadenze();
+}
+
+async function caricaScadenze() {
+  try {
+    const r = await fetch("/api/magazzino/scadenze?finestra=" + SCAD_FINESTRA);
+    if (!r.ok) throw new Error();
+    SCAD_DATI = await r.json();
+    renderSezScadenze();
+  } catch (e) {
+    $("tabella-scad-ing").innerHTML = "";
+    $("tabella-scad-pro").innerHTML =
+      '<div class="loading">Il server non risponde.</div>';
+  }
+}
+
+function renderSezScadenze() {
+  const ing = SCAD_DATI.filter(r => r.tipo === "ingresso");
+  const pro = SCAD_DATI.filter(r => r.tipo === "interno");
+  $("contatore-scad").textContent =
+    ing.length + " ingredienti · " + pro.length + " prodotti";
+  renderScadIng(ing);
+  renderScadPro(pro);
+}
+
+function testoScad(r) {
+  // la ricerca copre nome, lotto, marca e fornitore (regola trasversale)
+  return (r.prodotto + " " + r.lotto + " " + (r.marca || "") + " " +
+    (r.fornitore || "")).toLowerCase();
+}
+
+function renderScadIng(ing) {
+  const cerca = ($("cerca-scad-ing").value || "").trim().toLowerCase();
+  const righe = cerca ? ing.filter(r => testoScad(r).includes(cerca)) : ing;
+  if (!righe.length) {
+    $("tabella-scad-ing").innerHTML = '<table><tr><td class="empty">' +
+      (cerca ? "Nessun ingrediente corrisponde alla ricerca." :
+        "Nessun ingrediente in scadenza in questa finestra.") + "</td></tr></table>";
+    return;
+  }
+  $("tabella-scad-ing").innerHTML =
+    "<table><tr><th>Prodotto / lotto</th><th>Marca</th><th>Origine</th>" +
+    "<th class='num'>In casa</th><th>Scadenza</th></tr>" +
+    righe.map(r => rigaScad(r)).join("") + "</table>";
+  document.querySelectorAll("#tabella-scad-ing tr[data-id]").forEach(tr =>
+    tr.addEventListener("click", () => vaiADettaglioArrivo(Number(tr.dataset.id))));
+}
+
+function renderScadPro(pro) {
+  const cerca = ($("cerca-scad-pro").value || "").trim().toLowerCase();
+  const righe = cerca ? pro.filter(r => testoScad(r).includes(cerca)) : pro;
+  if (!righe.length) {
+    $("tabella-scad-pro").innerHTML = '<table><tr><td class="empty">' +
+      (cerca ? "Nessun prodotto corrisponde alla ricerca." :
+        "Nessun prodotto in scadenza in questa finestra.") + "</td></tr></table>";
+    return;
+  }
+  $("tabella-scad-pro").innerHTML =
+    "<table><tr><th>Prodotto / lotto</th><th class='num'>Q.tà</th>" +
+    "<th>Scadenza</th></tr>" +
+    righe.map(r =>
+      "<tr class='click' data-id='" + r.id + "'>" +
+      "<td><b>" + esc(r.prodotto) + "</b> " + consBadge(r.conservazione) +
+      "<br><span class='mono'>" + esc(r.lotto) + "</span></td>" +
+      "<td class='num'>" + fmt(r.quantita) + "\u00A0" + esc(r.um || "") + "</td>" +
+      '<td class="td-scad">' + badgeScadenza(r) + "</td></tr>"
+    ).join("") + "</table>";
+  document.querySelectorAll("#tabella-scad-pro tr[data-id]").forEach(tr =>
+    tr.addEventListener("click", () => vaiADettaglioProduzione(Number(tr.dataset.id))));
+}
+
+function rigaScad(r) {
+  return "<tr class='click' data-id='" + r.id + "'>" +
+    "<td><b>" + esc(r.prodotto) + "</b> " + consBadge(r.conservazione) +
+    "<br><span class='mono'>" + esc(r.lotto) + "</span></td>" +
+    "<td>" + marcaBadge(r.marca) + "</td>" +
+    "<td>arrivo · " + esc(r.fornitore) + "</td>" +
+    "<td class='num'>" + fmt(r.quantita) + "\u00A0" + esc(r.um || "") + "</td>" +
+    '<td class="td-scad">' + badgeScadenza(r) + "</td></tr>";
+}
+
+$("scad-finestra").addEventListener("change", e => {
+  SCAD_FINESTRA = e.target.value;
+  caricaScadenze();
+});
+$("cerca-scad-ing").addEventListener("input", () => renderSezScadenze());
+$("cerca-scad-pro").addEventListener("input", () => renderSezScadenze());
+
+/* ========================= Magazzino ========================= */
+/* Tutto letto, niente scritto: le giacenze sono arrivi meno consumi e il
+   server calcola anche coperture e rifornimenti attesi. I chip di
+   conservazione filtrano le due card insieme (specifica del prototipo). */
+
+let MAG_FILTRO = "";    // "" = tutte le conservazioni
+let MAG_DATI = null;    // ultima risposta, per rifiltrare senza rifetch
+
+async function avviaMagazzino() {
+  caricaMagazzino();
+}
+
+async function caricaMagazzino() {
+  try {
+    const r = await fetch("/api/magazzino");
+    if (!r.ok) throw new Error();
+    MAG_DATI = await r.json();
+    renderMagazzino(MAG_DATI);
+  } catch (e) {
+    $("mag-da-ordinare").innerHTML = "";
+    $("tabella-magazzino").innerHTML =
+      '<div class="loading">Il server non risponde.</div>';
+  }
+}
+
+function renderMagazzino(dati) {
+  renderChipsMagazzino(dati);
+  renderDaOrdinare(dati);
+  renderGiacenze(dati);
+}
+
+function consOf(r) {
+  return r.conservazione || "Da sistemare";
+}
+
+function renderChipsMagazzino(dati) {
+  // conteggio per conservazione = lotti in giacenza (come da specifica)
+  const conteggi = {};
+  dati.righe.forEach(r => {
+    const c = consOf(r);
+    conteggi[c] = (conteggi[c] || 0) + r.n_lotti;
+  });
+  const tot = dati.righe.reduce((s, r) => s + r.n_lotti, 0);
+  $("mag-chips").innerHTML = chipMag("", "Tutti", tot) +
+    Object.keys(conteggi).sort().map(c => chipMag(c, c, conteggi[c])).join("");
+}
+
+function chipMag(valore, etichetta, n) {
+  const emoji = valore === "Frigo" ? "🧊 " : valore === "Freezer" ? "❄️ "
+    : valore === "Magazzino" ? "📦 " : "";
+  return '<button class="chip-filtro' +
+    (valore === MAG_FILTRO ? " attivo" : "") +
+    '" data-cons="' + esc(valore) + '">' + emoji + esc(etichetta) + " · " + n + "</button>";
+}
+
+$("mag-chips").addEventListener("click", e => {
+  const b = e.target.closest(".chip-filtro");
+  if (!b || !MAG_DATI) return;
+  MAG_FILTRO = b.dataset.cons;
+  renderMagazzino(MAG_DATI);   // rifiltro i dati già in casa, senza rifetch
+});
+
+function renderDaOrdinare(dati) {
+  const ordine = { rosso: 0, ambra: 1 };
+  const righe = dati.stat
+    .filter(s => s.da_ordinare && (MAG_FILTRO === "" || consOf(s) === MAG_FILTRO))
+    .sort((a, b) => (ordine[a.livello] - ordine[b.livello]) || (a.copertura - b.copertura));
+  if (!righe.length) {
+    $("mag-da-ordinare").innerHTML =
+      '<table><tr><td class="empty">Niente da ordinare: tutte le coperture oltre i 7 giorni.</td></tr></table>';
+    return;
+  }
+  $("mag-da-ordinare").innerHTML =
+    "<table><tr><th>Prodotto</th><th class='num'>Giacenza</th>" +
+    "<th class='num'>Consumo med./g</th><th class='num'>Copertura</th>" +
+    "<th>Ultimo arrivo</th><th>Prossimo atteso</th></tr>" +
+    righe.map(s =>
+      "<tr><td><b>" + esc(s.nome) + "</b> " + consBadge(s.conservazione) + "</td>" +
+      "<td class='num'><b>" + fmt(s.giacenza_tot) + "</b>\u00A0" + esc(s.um || "") + "</td>" +
+      "<td class='num'>" + (s.consumo_medio == null ? "—" :
+        fmt(s.consumo_medio) + "\u00A0" + esc(s.um || "")) + "</td>" +
+      "<td class='num'>" + badgeCopertura(s) + "</td>" +
+      "<td>" + esc(s.ultimo_arrivo) + "</td>" +
+      "<td>" + esc(s.prossimo_atteso || "—") + "</td></tr>"
+    ).join("") + "</table>";
+}
+
+function badgeCopertura(s) {
+  if (s.copertura == null) return '<span class="badge b-gray">—</span>';
+  const testo = fmt(s.copertura) + " giorni";
+  if (s.livello === "rosso") return '<span class="badge b-red">' + testo + "</span>";
+  if (s.livello === "ambra") return '<span class="badge b-amber">' + testo + "</span>";
+  return '<span class="badge b-green">' + testo + "</span>";
+}
+
+function renderGiacenze(dati) {
+  const stat = {};
+  dati.stat.forEach(s => { stat[s.prodotto_id] = s; });
+  const gruppi = [];   // nell'ordine alfabetico del server: righe già ordinate
+  dati.righe.forEach(r => {
+    const g = gruppi.find(x => x.s.prodotto_id === r.prodotto_id);
+    if (g) g.marche.push(r);
+    else gruppi.push({ s: stat[r.prodotto_id] || r, marche: [r] });
+  });
+  const visibili = gruppi.filter(g => MAG_FILTRO === "" || consOf(g.s) === MAG_FILTRO);
+  if (!visibili.length) {
+    $("tabella-magazzino").innerHTML =
+      '<table><tr><td class="empty">Nessuna giacenza' +
+      (MAG_FILTRO ? " in " + esc(MAG_FILTRO) : "") + ".</td></tr></table>";
+    return;
+  }
+  $("tabella-magazzino").innerHTML =
+    "<table><tr><th>Prodotto</th><th>Marca</th><th class='num'>Giacenza</th>" +
+    "<th class='num'>Consumo med./g</th><th class='num'>Copertura</th>" +
+    "<th class='num'>Arrivi</th><th>Ultimo arrivo</th><th>Prossimo atteso</th></tr>" +
+    visibili.map(g => rigaMagazzino(g)).join("") + "</table>";
+}
+
+function rigaMagazzino(g) {
+  const s = g.s, multi = g.marche.length > 1;
+  const padri =
+    "<tr class='riga-mag-box'>" +
+    "<td><b>" + esc(s.nome) + "</b> " + consBadge(s.conservazione) + "</td>" +
+    "<td>" + (multi ? '<span class="muted">' + g.marche.length + " marche</span>"
+      : marcaBadge(g.marche[0].marca)) + "</td>" +
+    "<td class='num'><b>" + fmt(s.giacenza_tot) + "</b>\u00A0" + esc(s.um || "") +
+    ' <span class="muted">(' + g.marche.reduce((t, m) => t + m.n_lotti, 0) + " lotti)</span></td>" +
+    "<td class='num'>" + (s.consumo_medio == null ? "—" :
+      fmt(s.consumo_medio) + "\u00A0" + esc(s.um || "")) + "</td>" +
+    "<td class='num'>" + badgeCopertura(s) + "</td>" +
+    "<td class='num'>" + s.n_arrivi +
+    (s.cadenza == null ? "" : ' <span class="muted">(ogni ~' + Math.round(s.cadenza) + "g)</span>") + "</td>" +
+    "<td>" + esc(s.ultimo_arrivo) + "</td>" +
+    "<td>" + esc(s.prossimo_atteso || "—") + "</td></tr>";
+  const figlie = multi ? g.marche.map(m =>
+    "<tr class='riga-figlia'><td></td>" +
+    "<td class='td-marca'>└ " + marcaBadge(m.marca) + "</td>" +
+    "<td class='num'>" + fmt(m.giacenza) + "\u00A0" + esc(s.um || "") + "</td>" +
+    "<td colspan='5'></td></tr>"
+  ).join("") : "";
+  return padri + figlie;
+}
+
+function marcaBadge(marca) {
+  return marca && marca !== "—"
+    ? '<span class="badge b-gray">🏷 ' + esc(marca) + "</span>" : "—";
 }
 
 /* ========================= Produzioni ========================= */
@@ -670,6 +922,8 @@ async function apriDettaglioProduzione(id) {
         flashProduzioni("Produzione eliminata, giacenze ripristinate.");
         caricaProduzioni();
         sezioniCaricate.arrivi = false;
+        sezioniCaricate.magazzino = false;
+        sezioniCaricate.scadenze = false;
         sezioniCaricate.dashboard = false;
       } else {
         const c = await r.json();
@@ -1257,6 +1511,8 @@ async function registraLottoAssegna() {
     riga.assegnazioni = (dalNuovo > 0 ? [{ lotto: nuovo, quantita: dalNuovo }] : []).concat(dalResto);
     // un arrivo in più: Arrivi e Dashboard rivedranno il mondo al prossimo passaggio
     sezioniCaricate.arrivi = false;
+    sezioniCaricate.magazzino = false;
+    sezioniCaricate.scadenze = false;
     sezioniCaricate.dashboard = false;
     renderRighe();   // il pannello si riapre col lotto nuovo già in elenco
   } catch (e) {
@@ -1418,6 +1674,8 @@ async function salvaProduzione() {
     flashProduzioni("Lotto " + corpo.codice_lotto + " creato: consumi registrati e giacenze scaricate.");
     caricaProduzioni();
     sezioniCaricate.arrivi = false;   // le giacenze sono cambiate
+    sezioniCaricate.magazzino = false;
+    sezioniCaricate.scadenze = false;
     if (!$("sez-arrivi").hidden) avviaArrivi();
   } catch (e) {
     mostraErroreProduzione("Il server non risponde.");
@@ -1942,6 +2200,8 @@ function anagCombosRivedonoIlMondo() {
   sezioniCaricate.arrivi = false;
   sezioniCaricate.produzioni = false;
   sezioniCaricate.ricette = false;
+  sezioniCaricate.magazzino = false;
+  sezioniCaricate.scadenze = false;
 }
 
 function badgeAllergeni(alls) {

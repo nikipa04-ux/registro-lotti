@@ -28,11 +28,13 @@ registro-lotti/
 │   │   ├── fefo.py        #   proposta lotti che scadono prima
 │   │   ├── lotti.py       #   generazione codice SIGLA-AAAAMMGG-NN
 │   │   ├── arrivi.py      #   regole di registrazione di un arrivo
+│   │   ├── magazzino.py   #   giacenze, consumo medio, coperture, scadenze: CALCOLATI
 │   │   ├── produzioni.py  #   proposta FEFO e verbale della produzione
 │   │   ├── ricette.py     #   il master: upsert ricetta, famiglia, righe
 │   │   ├── etichetta.py   #   lista ingredienti calcolata dai consumi
 │   │   ├── etichetta_pdf.py  # il PDF a griglia del foglio A4 (solo stdlib)
 │   │   ├── impostazioni.py  #   dati del produttore (chi firma l'etichetta)
+│   │   ├── magazzino.py   #   giacenze per marca, coperture, finestre di scadenza
 │   │   ├── foodcost.py    #   costi: storico prezzi dagli arrivi
 │   │   └── dashboard.py   #   scadenze imminenti e contatori
 │   └── ui/                # interfaccia reale (dashboard + arrivi + produzioni)
@@ -152,8 +154,49 @@ senza consumi l'arrivo si elimina dal bottone 🗑 nel dettaglio.
 sempre l'ULTIMA riga della tendina; la creazione rapida non fa mai cambiare
 schermata e il nome cercato arriva già precompilato (modificabile).
 
-Le altre sezioni (scadenze, magazzino) sono segnate "presto" nella
-navigazione e arrivano nei prossimi capitoli.
+### Scadenze
+
+Il registro HACCP vero: chi scade prima viene prima. Tutto calcolato
+dai lotti registrati, ordinato per urgenza, ingredienti e prodotti
+separati (`app/logic/magazzino.py`).
+
+- **Selettore finestra**: default **7 giorni**, con 3 / 30 / tutte; il
+  filtro "Scaduti" mostra SOLO i lotti già scaduti ma ancora in casa
+  (vanno buttati, non nascosti tra chi scade domani)
+- **🛒 Ingredienti in scadenza**: lotti in ingresso con giacenza, con
+  marca (del lotto o dell'anagrafica), fornitore, quantità in casa e
+  badge colore: rosso ≤ 3 giorni, ambra ≤ 7, "scaduto" grigio
+- **🥣 Prodotti in scadenza**: lotto interno, quantità prodotta
+  (nello u.m. di chi ha registrato la produzione) e stessa scala di
+  colori
+- Due ricerche indipendenti (nome, marca, lotto, fornitore); righe
+  cliccabili: aprono il dettaglio del lotto nella sezione di origine
+- I lotti esauriti non interessano più la scadenza: chi è già consumato
+  non può far male
+
+### Magazzino
+
+Il magazzino NON si scrive: si LEGGE. Le giacenze sono arrivi meno
+consumi (il verbale delle produzioni scarica i lotti) e qui non si
+inserisce nulla a mano: due card, entrambe calcolate dalle
+registrazioni vere (`app/logic/magazzino.py`).
+
+- **🛒 Da ordinare**: gli ingredienti la cui COPERTURA (giacenza /
+  consumo medio del giorno) scende sotto i **7 giorni**; primo in
+  lista chi è già a zero col consumo storico alle spalle. Badge
+  rosso sotto i **3 giorni**, ambra fino a 7
+- **📦 Giacenze e rifornimenti**: per ogni ingrediente in giacenza:
+  giacenza totale, consumo medio/giorno calcolato su TUTTO lo
+  storico (dal primo arrivo), copertura in giorni, numero di arrivi
+  con cadenza media, ultimo arrivo e prossimo rifornimento ATTESO
+  (ultimo + cadenza). Con più marche dello stesso ingrediente in
+  casa, le righe figlie mostrano la giacenza di ciascuna: l'unica
+  cosa che cambia è la marca del lotto, l'anagrafica resta una
+- **Chip di filtro** per conservazione (con conteggio dei lotti,
+  anche "Da sistemare" per chi non ce l'ha): valgono per ENTRAMBE
+  le card
+- Senza consumi non c'è copertura (non si sa quanto duri): resta
+  "—" e non finisce in Da ordinare
 
 ### Produzioni
 
