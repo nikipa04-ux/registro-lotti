@@ -172,7 +172,7 @@ della ricetta, l'operatore al massimo corregge.
   dalla SOLA libreria standard Python: nessuna dipendenza nuova, font
   Helvetica/Courier di base con accenti italiani (à è ì ò ù é). Ogni
   etichetta accompagna il prodotto: nome, lotto interno, prodotto il /
-  scade il, ingredienti calcolati, allergeni in rosso se presenti.
+  scade il, ingredienti calcolati, allergeni in neretto (tutto nero) se presenti.
   + bottone "🗑 Elimina" (annulla il verbale e ripristina le giacenze);
   il contenuto scrolla DENTRO la card (intestazione fissa, azioni sempre
   visibili)

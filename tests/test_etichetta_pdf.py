@@ -109,10 +109,10 @@ def test_pdf_contenuto_dell_etichetta(conn):
     assert "Ingredienti" in testo
     assert "Latte fresco" in testo
     assert "Crema pasticcera" not in testo.rsplit("Ingredienti", 1)[1]
-    # gli allergeni si dichiarano in neretto rosso: c'è il colore
+    # gli allergeni si dichiarano in NERETTO: e TUTTO il pdf è MONOCROMO
     assert b"Contiene:" in pdf
     assert pdf.count(b"Contiene: Latte, Uova") == 1
-    assert b"0.720 0.050 0.050 rg" in pdf
+    assert b"0.720 0.050 0.050 rg" not in pdf    # niente rosso: tutto nero
     # la data e gli ingredienti SONO nella cella (bordi): guida di taglio
 
 

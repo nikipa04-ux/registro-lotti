@@ -17,7 +17,9 @@ Contenuto di ogni etichetta (i dati CALCOLATI, nessuno snapshot):
   - ingredienti: la lista calcolata da logic/etichetta.py
     (denominazioni legali, ordine di quantità d'uso; la quantità NON
     si dichiara, Reg. UE 1169/2011)
-  - allergeni: "Contiene:" in neretto rosso, solo se ce ne sono
+  - allergeni: "Contiene:" in neretto, TUTTO NERO su richiesta di
+    Nicolas (18/11): l'etichetta stampata resta monocromatica,
+    solo se ce ne sono
 """
 
 import unicodedata
@@ -140,8 +142,10 @@ def _blocchi_etichetta(dati, scala, max_larg):
             "Contiene: " + ", ".join(dati["allergeni"]),
             "F2", 8.8 * scala, max_larg,
         )
+        # NERO anche gli allergeni (richiesta di Nicolas): il colore è
+        # solo del cicchetto, non serve alla stampa
         blocchi.append(
-            ("F2", 8.8 * scala, contiene, (0.72, 0.05, 0.05)))
+            ("F2", 8.8 * scala, contiene, None))
     return blocchi
 
 
