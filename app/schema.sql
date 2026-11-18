@@ -20,6 +20,18 @@ CREATE TABLE IF NOT EXISTS famiglie (
     nome TEXT NOT NULL UNIQUE
 );
 
+-- Unità di misura dell'anagrafica (nate col RIFIN 34). g/kg/ml/lt sono
+-- DI SISTEMA: alimentano le conversioni di logic/um.py e l'API le protegge
+-- da rinomina ed eliminazione. Le u.m. libere (pz, teglie, porzioni...)
+-- si aggiungono e si rinominano qui; i prodotti che le usano seguono la
+-- rinomina, i LOTTI PRODOTTI no (um_prodotta è lo snapshot storico del
+-- verbale: non si ritocca mai). A ogni avvio db.inizializza() ripopola
+-- la tabella con le u.m. di sistema + quelle già usate dai prodotti.
+CREATE TABLE IF NOT EXISTS unita_misura (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL UNIQUE
+);
+
 -- I 14 allergeni obbligatori (Reg. UE 1169/2011)
 CREATE TABLE IF NOT EXISTS allergeni (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,6 +89,10 @@ CREATE TABLE IF NOT EXISTS lotti_interni (
                                                    -- produzione (può differire dalla ricetta)
     qta_prodotta REAL,              -- fondamentale per l'etichetta calcolata: attribuzione
                                      -- esatta degli ingredienti dei lotti interni consumati
+    um_prodotta TEXT,               -- SNAPSHOT: u.m. con cui l'operatore ha MISURATO la
+                                     -- quantità prodotta (es. 'teglie' per un prodotto in pz:
+                                     -- tipi diversi non si convertono, il lotto dice la
+                                     -- verità). NULL = u.m. canonica del prodotto
     codice_lotto TEXT NOT NULL UNIQUE,  -- auto-generato: SIGLA-AAAAMMGG-NN
     data_produzione TEXT NOT NULL,
     data_scadenza TEXT NOT NULL,

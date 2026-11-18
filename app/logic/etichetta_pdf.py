@@ -203,7 +203,8 @@ def etichetta_pdf(conn, lotto_interno_id, copie=8):
     dopo pagina, senza sprecare né carta né fiato).
     """
     lotto = conn.execute(
-        "SELECT li.*, p.nome AS prodotto, p.unita_misura AS um "
+        "SELECT li.*, p.nome AS prodotto, "
+        "COALESCE(li.um_prodotta, p.unita_misura) AS um "
         "FROM lotti_interni li JOIN prodotti p ON p.id = li.prodotto_id "
         "WHERE li.id = ?", (lotto_interno_id,),
     ).fetchone()

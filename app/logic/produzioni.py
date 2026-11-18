@@ -12,6 +12,7 @@ from datetime import date
 
 from .fefo import copertura_fefo, ordina_fefo
 from .lotti import genera_codice
+from . import um
 
 
 class ErroreProduzione(ValueError):
@@ -56,7 +57,12 @@ def lotti_disponibili(conn, ingrediente_id, oggi=None):
         "li.data_produzione AS data_arrivo, li.qta_prodotta AS quantita_residua, "
         "'interno' AS origine, NULL AS fornitore "
         "FROM lotti_interni li "
-        "WHERE li.prodotto_id = ? AND li.data_scadenza >= ?",
+        "JOIN prodotti p ON p.id = li.prodotto_id "
+        "WHERE li.prodotto_id = ? AND li.data_scadenza >= ? "
+        # un lotto prodotto in u.m. NON convertibile (es. 6 teglie di un
+        # prodotto in pz) non si traduce in giacenza canonica: la FEFO non
+        # lo propone (regola di progetto: nessuna conversione fra tipi)
+        "AND (li.um_prodotta IS NULL OR li.um_prodotta = p.unita_misura)",
         (ingrediente_id, oggi.isoformat()),
     ).fetchall():
         lotti.append(dict(r))
@@ -190,6 +196,19 @@ def registra_produzione(conn, dati):
         if qta_prodotta <= 0:
             raise ErroreProduzione("La quantità prodotta deve essere maggiore di zero")
 
+    # SNAPSHOT u.m.: 6 teglie di un prodotto in pz (tipi diversi non si
+    # convertono). La conversione g<->kg / ml<->lt spetta a CHI CHIAMA
+    # (la UI lo fa da sola): se arriva un'um CONVERTIBILE questa API non
+    # converte di nascosto, rifiuta.
+    um_prodotta = (dati.get("um_prodotta") or "").strip() or None
+    if um_prodotta and um_prodotta == prodotto["unita_misura"]:
+        um_prodotta = None
+    if um_prodotta and um.fattore(um_prodotta, prodotto["unita_misura"]) is not None:
+        raise ErroreProduzione(
+            f"La quantità prodotta va CONVERTITA in {prodotto['unita_misura']} "
+            f"prima del salvataggio (u.m. '{um_prodotta}' dello stesso tipo)"
+        )
+
     consumi = dati.get("consumi") or []
     if not consumi:
         raise ErroreProduzione(
@@ -265,10 +284,10 @@ def registra_produzione(conn, dati):
     codice = genera_codice(conn, dict(prodotto), data_produzione)
     cur = conn.execute(
         "INSERT INTO lotti_interni (prodotto_id, famiglia_id, qta_prodotta, "
-        "codice_lotto, data_produzione, data_scadenza, ricetta_modificata) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "codice_lotto, data_produzione, data_scadenza, ricetta_modificata, "
+        "um_prodotta) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (prodotto_id, famiglia_id, qta_prodotta, codice, data_produzione,
-         data_scadenza, ricetta_modificata),
+         data_scadenza, ricetta_modificata, um_prodotta),
     )
     lotto_interno_id = cur.lastrowid
     for c in consumi:

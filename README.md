@@ -209,8 +209,12 @@ della ricetta, l'operatore al massimo corregge.
      marca e prezzi si completano in Arrivi), entra nella riga e la FEFO
      copre il resto: la tracciabilità resta intatta, il verbale scarica
      un lotto che esiste davvero
-  3. date e quantità prodotta (default = resa della ricetta; anche qui si
-     cambia u.m. dentro lo stesso gruppo: pesi in g, si salva in kg) → salva
+  3. date e quantità prodotta (default = resa della ricetta; l'elenco
+     offre TUTTE le u.m. dell'app: stesso tipo g↔kg, ml↔lt si riconverte
+     da solo e si salva in u.m. canonica; tipo diverso, es. 6 teglie di
+     un prodotto in pz, nessun calcolo automatico e il lotto registra la
+     quantità nell'u.m. scelta, che resta visibile in dettaglio, scheda
+     prodotto ed etichetta PDF) → salva
 
 Al salvataggio il server RIVALIDA tutto (`app/logic/produzioni.py`):
 giacenze sufficienti, consumi non vuoti (il verbale), niente lotto ripetuto,
@@ -296,6 +300,16 @@ ricetta (qui NON si tocca, al massimo la si apre).
   - **🏷 Famiglie**: creazione inline, **rinomina inline ✏️ che si
     propaga ovunque** (tutto JOINa per id), conteggio prodotti cliccabile
     (filtra la card Prodotti), eliminazione solo se non usata
+  - **⚖️ Unità di misura**: l'elenco che alimenta i selettori dell'app
+    (produzione e chi verrà). Creazione inline, **rinomina inline ✏️ che
+    si propaga ai prodotti che la usano** (i lotti già prodotti restano
+    con l'u.m. storica del verbale: lo snapshot non si riscrive),
+    eliminazione solo se non usata. g, kg, ml e lt sono badge "⚙ di
+    sistema": alimentano le conversioni e non si toccano. Il selettore
+    della quantità prodotta pesa da qui, in unione con le u.m. ancora in
+    uso sui prodotti (nei form il campo u.m. resta testo libero: una u.m.
+    digitata funziona anche senza creare la voce). A ogni avvio il seed
+    ripopola la tabella con le u.m. di sistema + quelle già usate.
 - **Scheda di dettaglio** (clic su una riga): sui monitor larghi
   (≥ 1400px) si apre come **pannello laterale ancorato accanto alle
   card**, sul lato destro dello schermo, sempre visibile mentre si

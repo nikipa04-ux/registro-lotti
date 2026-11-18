@@ -5,14 +5,18 @@ from app.logic.anagrafiche import (
     ErroreAnagrafica,
     allergeni_da_ricetta,
     crea_ingrediente,
+    crea_unita,
     dettaglio_fornitore,
     dettaglio_prodotto,
     elimina_fornitore,
     elimina_prodotto,
+    elimina_unita,
     garantisci_allergeni_di_legge,
     lista_ingredienti,
     lista_prodotti,
+    lista_unita,
     rinomina_famiglia,
+    rinomina_unita,
     salva_fornitore,
     salva_prodotto,
 )
@@ -74,6 +78,8 @@ def conn():
         "data_arrivo, data_scadenza, quantita, quantita_residua, prezzo_unitario, iva) "
         "VALUES (100, 1, 1, 'LAT-A', '2026-11-10', '2026-11-20', 10, 10, 2, 10)"
     )
+    # il seed delle u.m. come fa il server a ogni avvio (RIFIN 34)
+    db.popola_unita_misura(c)
     c.commit()
     yield c
     c.close()
@@ -336,3 +342,80 @@ def test_salva_fornitore_aggiorna_i_contatti(conn):
     with pytest.raises(ErroreAnagrafica, match="ragione sociale"):
         salva_fornitore(conn, {"id": 1, "nome": " ", "piva": None,
                                "telefono": None, "email": None, "note": None})
+
+
+# ---- Unità di misura (RIFIN 34) ----
+
+def test_seed_delle_unita_riporta_quelle_usate():
+    # il seed di inizializza() ritrova da SOLO le u.m. già usate dai
+    # prodotti + le 4 di sistema, senza toccare le modifiche dell'utente
+    import os
+    import tempfile
+    percorso = os.path.join(tempfile.gettempdir(), "test_seed_um.db")
+    if os.path.exists(percorso):
+        os.remove(percorso)
+    c = db.inizializza(percorso)   # DB NUOVO: nessun prodotto ancora
+    nomi = [r["nome"] for r in c.execute("SELECT nome FROM unita_misura").fetchall()]
+    assert set(nomi) == {"g", "kg", "ml", "lt"}
+    c.execute(
+        "INSERT INTO prodotti (nome, conservazione, unita_misura) "
+        "VALUES ('Pirottini', 'Magazzino', 'pz')"
+    )
+    c.commit()
+    c.close()
+    c = db.inizializza(percorso)   # secondo avvio: il seed è idempotente
+    nomi = [r["nome"] for r in c.execute("SELECT nome FROM unita_misura").fetchall()]
+    assert set(nomi) == {"g", "kg", "ml", "lt", "pz"}
+    c.close()
+    os.remove(percorso)
+
+
+def test_crea_unita_e_rifiuta_duplicati(conn):
+    u = crea_unita(conn, "vassoi")
+    assert u["nome"] == "vassoi"
+    with pytest.raises(ErroreAnagrafica, match="già"):
+        crea_unita(conn, "VASSOI")   # il confronto non respira mai il maiuscolo
+    with pytest.raises(ErroreAnagrafica, match="obbligatorio"):
+        crea_unita(conn, "   ")
+    with pytest.raises(ErroreAnagrafica, match="sistema"):
+        crea_unita(conn, "kg")      # le 4 di sistema esistono già per legge
+
+
+def test_lista_unita_conta_i_prodotti_e_marchia_le_di_sistema(conn):
+    crea_unita(conn, "vassoi")
+    righe = {r["nome"]: r for r in lista_unita(conn)}
+    assert righe["kg"]["sistema"] is True
+    assert righe["vassoi"]["sistema"] is False
+    assert righe["pz"]["n_prodotti"] == 3   # uova, bignè e tortina
+
+
+def test_rinomina_unita_si_propaga_ai_prodotti(conn):
+    u = crea_unita(conn, "teglie")
+    conn.execute(
+        "UPDATE prodotti SET unita_misura = 'teglie' WHERE id = 5"
+    )
+    r = rinomina_unita(conn, u["id"], "teglia")
+    assert r["n_prodotti_aggiornati"] == 1
+    assert conn.execute(
+        "SELECT unita_misura FROM prodotti WHERE id = 5"
+    ).fetchone()["unita_misura"] == "teglia"
+
+
+def test_le_unita_di_sistema_non_si_toccano(conn):
+    righe = [r for r in lista_unita(conn) if r["sistema"]]
+    assert {r["nome"] for r in righe} == {"g", "kg", "ml", "lt"}
+    kg_id = conn.execute(
+        "SELECT id FROM unita_misura WHERE nome = 'kg'").fetchone()["id"]
+    with pytest.raises(ErroreAnagrafica, match="sistema"):
+        rinomina_unita(conn, kg_id, "kili")
+    with pytest.raises(ErroreAnagrafica, match="sistema"):
+        elimina_unita(conn, kg_id)
+
+
+def test_elimina_unita_solo_se_libera(conn):
+    u = crea_unita(conn, "vassoi")
+    elimina_unita(conn, u["id"])      # mai usata: via
+    pz_id = conn.execute(
+        "SELECT id FROM unita_misura WHERE nome = 'pz'").fetchone()["id"]
+    with pytest.raises(ErroreAnagrafica, match="In uso"):
+        elimina_unita(conn, pz_id)     # 3 prodotti la usano: bloccata

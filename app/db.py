@@ -44,5 +44,24 @@ def inizializza(db_path=None):
         conn.executescript(f.read())
     garantisci_colonna(conn, "lotti_interni", "ricetta_modificata",
                        "INTEGER NOT NULL DEFAULT 0")
+    garantisci_colonna(conn, "lotti_interni", "um_prodotta", "TEXT")
+    popola_unita_misura(conn)
     conn.commit()
     return conn
+
+
+def popola_unita_misura(conn):
+    """Anagrafica delle u.m. (RIFIN 34): seed AUTOPOPOLANTE, a ogni avvio.
+
+    Le 4 di sistema + le u.m. già usate dai prodotti. Idempotente:
+    INSERT OR IGNORE non tocca mai le u.m. aggiunte o rinominate
+    dall'utente (e i DB nati prima ci arrivano da soli).
+    """
+    for um in ("g", "kg", "ml", "lt"):
+        conn.execute("INSERT OR IGNORE INTO unita_misura (nome) VALUES (?)", (um,))
+    for r in conn.execute(
+        "SELECT DISTINCT unita_misura FROM prodotti "
+        "WHERE unita_misura IS NOT NULL AND TRIM(unita_misura) != ''"
+    ).fetchall():
+        conn.execute("INSERT OR IGNORE INTO unita_misura (nome) VALUES (?)",
+                     (r["unita_misura"].strip(),))

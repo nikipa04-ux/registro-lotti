@@ -540,6 +540,14 @@ function flashArrivi(testo) {
 async function avviaProduzioni() {
   try {
     await caricaAnagrafiche();
+    // l'elenco delle u.m. del selettore "quantità prodotta" (RIFIN 34):
+    // se manca (anagrafiche mai aperte in questa sessione) lo si carica ora
+    if (!UMS.length) {
+      try {
+        const r = await fetch("/api/anagrafiche/unita-misura");
+        if (r.ok) UMS = await r.json();
+      } catch (e) { /* resta il pool dai prodotti */ }
+    }
     // REGOLA: si produce solo ciò che HA ricetta. La tendina "Prodotto
     // da produrre" nasce quindi dalle RICETTE, e da lì prende i suoi dati
     // (prodotto, famiglia, sigla, u.m.): un prodotto senza ricetta non
@@ -686,13 +694,18 @@ let RICETTA_DA_PRODUZIONE = null;  // prodotto_id quando la ricetta nasce dal fo
    NP_UM_SCELTA quella con cui l'operatore pesa. Uguali = niente da fare.
    La conversione è la stessa regola di um.py: solo g<->kg e ml<->lt. */
 let NP_UM = null, NP_UM_SCELTA = null;
+let NP_RESA_PREFILL = null;   // il default della ricetta, da svuotare se si cambia TIPO di u.m.
 
 function popolaUmQta(um) {
   NP_UM = um || null;
   NP_UM_SCELTA = NP_UM;
-  const opzioni = NP_UM ? opzioniUm(NP_UM, NP_UM) : "";
+  NP_RESA_PREFILL = null;
+  // TUTTE le u.m. dell'app, non solo il fratello: in laboratorio si produce
+  // anche a teglie/porzioni. Se il prodotto non dichiara u.m. non c'è
+  // niente di sensato da proporre.
+  const opzioni = NP_UM ? opzioniUmTutte(NP_UM, NP_UM) : "";
   $("np-qta-um").innerHTML = opzioni;
-  $("np-qta-um").hidden = !opzioni;   // u.m. libera (pz, teglie): niente da convertire
+  $("np-qta-um").hidden = !opzioni;
 }
 
 function apriFormProduzione() {
@@ -723,13 +736,19 @@ $("btn-nuova-produzione-dash").addEventListener("click", () => { mostraSezione("
 $("np-annulla").addEventListener("click", chiudiFormProduzione);
 $("overlay-produzione").addEventListener("click", (e) => { if (e.target === e.currentTarget) chiudiFormProduzione(); });
 
-// cambio u.m. della quantità prodotta: il numero si riconverte da solo
+// cambio u.m. della quantità prodotta: stesso TIPO -> conversione automatica;
+// tipo diverso (pz, teglie, porzioni) -> NESSUN calcolo: il default della
+// ricetta non vale più e si svuota, il numero lo scrive l'operatore
 $("np-qta-um").addEventListener("change", () => {
   const nuova = $("np-qta-um").value;
   const f = fattoreUm(NP_UM_SCELTA, nuova);
   NP_UM_SCELTA = nuova;
   const q = Number($("np-qta").value);
-  if (q > 0 && f != null) $("np-qta").value = num3(q * f);
+  if (f != null) {
+    if (q > 0) $("np-qta").value = num3(q * f);
+  } else if (NP_RESA_PREFILL != null && q === NP_RESA_PREFILL) {
+    $("np-qta").value = "";
+  }
 });
 
 creaCombo({
@@ -834,6 +853,31 @@ function opzioniUm(um, scelta) {
   if (!fratello) return "";   // u.m. libera: nessuna conversione ammessa
   return '<option value="' + um + '"' + (scelta === um ? " selected" : "") + ">" + um + "</option>" +
     '<option value="' + fratello + '"' + (scelta === fratello ? " selected" : "") + ">" + fratello + "</option>";
+}
+
+function opzioniUmTutte(um, scelta) {
+  // TUTTE le u.m. che esistono: prima l'anagrafica delle u.m. (RIFIN 34),
+  // poi quelle ancora in uso sui prodotti (l'utente può digitare u.m. libere
+  // nei form prodotti senza crearle in anagrafica: qui appaiono uguale).
+  const pool = [um, FRATELLO_UM[um]];
+  for (const u of UMS) if (u.nome) pool.push(u.nome);
+  for (const p of INGREDIENTI.concat(PRODOTTI_LAB).concat(PRODUCIBILI))
+    if (p.unita_misura) pool.push(p.unita_misura);
+  const base = ["g", "kg", "ml", "lt"];
+  const viste = new Set();
+  const ordine = [];
+  for (const u of pool)
+    if (u && !viste.has(u)) { viste.add(u); ordine.push(u); }
+  ordine.sort((a, b) => {
+    const ia = base.indexOf(a), ib = base.indexOf(b);
+    if (ia >= 0 && ib >= 0) return ia - ib;
+    if (ia >= 0) return -1;
+    if (ib >= 0) return 1;
+    return a.localeCompare(b);
+  });
+  return ordine.map(u =>
+    '<option value="' + esc(u) + '"' + (scelta === u ? " selected" : "") + ">" + esc(u) + "</option>"
+  ).join("");
 }
 
 function selUmRiga(i, riga) {
@@ -1289,7 +1333,7 @@ async function caricaProposta(prodotto_id) {
     PANNELLO_ASSEGNA = null;
     // Prezzo di default della quantità prodotta: la resa della ricetta
     const resa = parseFloat((dati.ricetta.resa || "").replace(",", "."));
-    if (resa && !$("np-qta").value) $("np-qta").value = resa;
+    if (resa && !$("np-qta").value) { $("np-qta").value = resa; NP_RESA_PREFILL = resa; }
     renderRighe();
   } catch (e) {
     $("np-ricetta").innerHTML = '<div class="warn">⚠ Il server non risponde.</div>';
@@ -1304,11 +1348,18 @@ function mostraErroreProduzione(testo) {
 async function salvaProduzione() {
   if (!$("np-prodotto-id").value) return mostraErroreProduzione("Scegli il prodotto da produrre.");
   if (!$("np-data").value || !$("np-scadenza").value) return mostraErroreProduzione("Inserisci data di produzione e di scadenza.");
-  // il numero digitato è nella u.m. SCELTA: al server arriva in u.m. CANONICA
-  const fattoreQta = NP_UM && NP_UM_SCELTA && NP_UM_SCELTA !== NP_UM ? fattoreUm(NP_UM_SCELTA, NP_UM) : 1;
+  // il numero digitato: stesso TIPO -> ricondotto in u.m. CANONICA; tipo
+  // diverso (pz, teglie, porzioni) -> nessuna conversione possibile, il
+  // lotto registra la quantità nell'u.m. scelta (snapshot um_prodotta)
+  let fattoreQta = 1, umProdotta = null;
+  if (NP_UM && NP_UM_SCELTA && NP_UM_SCELTA !== NP_UM) {
+    const f = fattoreUm(NP_UM_SCELTA, NP_UM);
+    if (f != null) fattoreQta = f;        // g<->kg, ml<->lt: si salva in canonica
+    else umProdotta = NP_UM_SCELTA;       // inconvertibile: si salva così com'è
+  }
   const qtaProdotta = $("np-qta").value === ""
     ? null
-    : Number($("np-qta").value) * (fattoreQta || 1);
+    : Number($("np-qta").value) * fattoreQta;
   if (qtaProdotta !== null && qtaProdotta <= 0) return mostraErroreProduzione("La quantità prodotta deve essere maggiore di zero.");
 
   // Il verbale: consumi calcolati con la stessa FEFO mostrata,
@@ -1354,6 +1405,7 @@ async function salvaProduzione() {
         data_produzione: $("np-data").value,
         data_scadenza: $("np-scadenza").value,
         qta_prodotta: qtaProdotta,
+        um_prodotta: umProdotta,
         consumi: consumi,
       }),
     });
@@ -1854,6 +1906,9 @@ caricaDashboard();
 
 let ANAG_ALLERGENI = [];
 let ANAG_FAMIGLIE = [];         // cache della card famiglie (rinomina inline)
+let ANAG_UM = [];              // cache della card unità di misura
+let ANAG_UM_EDIT = null;       // id u.m. in rinomina inline
+let UMS = [];                  // elenco u.m. per i selettori (produzione, ecc.)
 let ANAG_FAM_FILTRO = null;     // famiglia scelta per la card Prodotti
 let ANAG_FAM_EDIT = null;       // id famiglia in rinomina inline
 let ANAG_ATTIVI = new Set();    // allergeni attivi nella scheda ingrediente
@@ -1871,6 +1926,7 @@ async function avviaAnagrafiche() {
   caricaProdottiAnag();
   caricaFornitoriAnag();
   caricaFamiglieAnag();
+  caricaUnitaAnag();
 }
 
 function flashAnagrafiche(testo) {
@@ -1996,6 +2052,83 @@ async function caricaFamiglieAnag() {
   }
 }
 
+/* ---- Unità di misura: stessa filosofia delle famiglie ----
+   Elenco per i selettori dell'app; le 4 di sistema (badge "di sistema")
+   non si toccano: alimentano le conversioni g<->kg e ml<->lt. */
+
+async function caricaUnitaAnag() {
+  try {
+    const r = await fetch("/api/anagrafiche/unita-misura");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    ANAG_UM = await r.json();
+    UMS = ANAG_UM;   // stesso elenco per i selettori (produzione, ecc.)
+    renderUnitaAnag();
+  } catch (e) {
+    $("tabella-anag-um").innerHTML = '<div class="loading">Il server non risponde.</div>';
+  }
+}
+
+function renderUnitaAnag() {
+  $("anag-conta-um").textContent = ANAG_UM.length;
+  $("tabella-anag-um").innerHTML = ANAG_UM.map(u => {
+    if (ANAG_UM_EDIT === u.id) {
+      return '<div class="anag-fam-riga"><input id="um-edit-nome" value="' + esc(u.nome) + '">' +
+        '<button class="btn" id="um-edit-salva">Salva</button>' +
+        '<button class="btn sec" id="um-edit-annulla">Annulla</button></div>';
+    }
+    const sistema = u.sistema
+      ? ' <span class="badge b-blue" title="Unità di sistema: alimenta le conversioni g↔kg e ml↔lt, non si rinomina né si elimina">⚙ di sistema</span>'
+      : " <span class=\"muted\">✏️</span>";
+    return '<div class="anag-fam-riga">' +
+      '<span class="anag-nome-fam" data-rinomina="' + u.id + '" data-sistema="' + (u.sistema ? 1 : 0) +
+      '" title="' + (u.sistema ? "Unità di sistema: protetta" : "Clic per rinominare") + '"><b>' +
+      esc(u.nome) + "</b>" + sistema + "</span>" +
+      '<span class="badge b-gray">' + u.n_prodotti +
+      (u.n_prodotti === 1 ? " prodotto" : " prodotti") + "</span>" +
+      (u.sistema ? "" :
+        '<button class="btn sec mini rosso" data-elimina="' + u.id + '" data-nome="' + esc(u.nome) +
+        '" title="Elimina u.m. (solo se non usata)">✕</button>') +
+      "</div>";
+  }).join("") || '<p class="muted" style="padding:10px">Nessuna unità di misura.</p>';
+  if (ANAG_UM_EDIT !== null) {
+    $("um-edit-nome").focus();
+    $("um-edit-salva").addEventListener("click", async () => {
+      const nome = $("um-edit-nome").value.trim();
+      if (!nome) return mostraErroreUm("Inserisci il nome dell'unità di misura.");
+      try {
+        const r = await fetch("/api/anagrafiche/unita-misura/" + ANAG_UM_EDIT, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nome: nome }),
+        });
+        if (!r.ok) {
+          const c = await r.json();
+          return mostraErroreUm(typeof c.detail === "string" ? c.detail : "Rinomina rifiutata.");
+        }
+        ANAG_UM_EDIT = null;
+        $("anag-um-errore").hidden = true;
+        flashAnagrafiche('U.m. rinominata: i prodotti che la usano la seguono.');
+        caricaUnitaAnag();
+        caricaIngredientiAnag();
+        caricaProdottiAnag();
+        anagCombosRivedonoIlMondo();
+      } catch (e) {
+        mostraErroreUm("Il server non risponde.");
+      }
+    });
+    $("um-edit-annulla").addEventListener("click", () => {
+      ANAG_UM_EDIT = null;
+      $("anag-um-errore").hidden = true;
+      renderUnitaAnag();
+    });
+  }
+}
+
+function mostraErroreUm(testo) {
+  $("anag-um-errore").textContent = testo;
+  $("anag-um-errore").hidden = false;
+}
+
 function renderFamiglieAnag() {
   $("anag-conta-fam").textContent = ANAG_FAMIGLIE.length;
   $("tabella-anag-fam").innerHTML = ANAG_FAMIGLIE.map(f => {
@@ -2107,6 +2240,32 @@ $("tabella-anag-fam").addEventListener("click", (e) => {
         }
       })
       .catch(() => mostraErroreFamiglia("Il server non risponde."));
+  }
+});
+
+$("tabella-anag-um").addEventListener("click", (e) => {
+  const rin = e.target.closest("[data-rinomina]");
+  if (rin) {
+    if (rin.dataset.sistema === "1")
+      return mostraErroreUm("Le unità di sistema (g, kg, ml, lt) alimentano le conversioni: non si rinominano.");
+    ANAG_UM_EDIT = Number(rin.dataset.rinomina);
+    return renderUnitaAnag();
+  }
+  const del = e.target.closest("[data-elimina]");
+  if (del) {
+    if (!confirm('Eliminare l\'unità di misura "' + del.dataset.nome +
+      '"? Possibile solo se nessun prodotto la usa.')) return;
+    fetch("/api/anagrafiche/unita-misura/" + del.dataset.elimina, { method: "DELETE" })
+      .then(r => {
+        if (r.status === 204) {
+          flashAnagrafiche('Unità di misura eliminata.');
+          caricaUnitaAnag();
+        } else {
+          return r.json().then(c =>
+            mostraErroreUm(typeof c.detail === "string" ? c.detail : "Eliminazione rifiutata."));
+        }
+      })
+      .catch(() => mostraErroreUm("Il server non risponde."));
   }
 });
 
@@ -2635,6 +2794,39 @@ $("fam-nuova-aggiungi").addEventListener("click", async () => {
     anagCombosRivedonoIlMondo();
   } catch (e) {
     mostraErroreFamiglia("Il server non risponde.");
+  }
+});
+
+/* ---- unità di misura: nuova riga inline ---- */
+
+$("anag-um-nuovo").addEventListener("click", () => {
+  $("um-nuova-nome").value = "";
+  $("anag-um-errore").hidden = true;
+  $("anag-um-nuova-riga").hidden = false;
+  $("um-nuova-nome").focus();
+});
+
+$("um-nuova-annulla").addEventListener("click", () => { $("anag-um-nuova-riga").hidden = true; });
+
+$("um-nuova-aggiungi").addEventListener("click", async () => {
+  const nome = $("um-nuova-nome").value.trim();
+  if (!nome) return mostraErroreUm("Inserisci il nome dell'unità di misura.");
+  try {
+    const r = await fetch("/api/anagrafiche/unita-misura", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome: nome }),
+    });
+    if (!r.ok) {
+      const c = await r.json();
+      return mostraErroreUm(typeof c.detail === "string" ? c.detail : "Creazione rifiutata.");
+    }
+    $("anag-um-nuova-riga").hidden = true;
+    $("anag-um-errore").hidden = true;
+    flashAnagrafiche('Unità di misura "' + nome + '" creata.');
+    caricaUnitaAnag();
+  } catch (e) {
+    mostraErroreUm("Il server non risponde.");
   }
 });
 

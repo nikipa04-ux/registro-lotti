@@ -25,6 +25,17 @@ CREATE TABLE famiglie (
     nome TEXT NOT NULL UNIQUE
 );
 
+-- Unità di misura (RIFIN 34): alimenta i selettori dell'app. g/kg/ml/lt
+-- sono DI SISTEMA (badge in UI, protette dalle regole di logic/anagrafiche:
+-- alimentano le conversioni di logic/um.py); le u.m. libere si aggiungono
+-- e si rinominano (la rinomina propaga ai prodotti che le usano; i lotti
+-- restano con lo SNAPSHOT storico um_prodotta). A ogni avvio il seed
+-- popola_unita_misura() in db.py ripopola con di-sistema + quelle usate.
+CREATE TABLE unita_misura (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL UNIQUE
+);
+
 -- Allergeni: i 14 obbligatori da etichetta (Reg. UE 1169/2011) con descrizione/esempi
 CREATE TABLE allergeni (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,6 +105,11 @@ CREATE TABLE lotti_interni (
                                                     -- Colonna nata dopo la v0: i DB esistenti
                                                     -- se la ritrovano con la migrazione di
                                                     -- garantisci_colonna() a ogni avvio
+    um_prodotta TEXT,                  -- SNAPSHOT: u.m. con cui l'operatore ha MISURATO la
+                                       -- quantità prodotta (tipi DIVERSI non si convertono:
+                                       -- es. 'teglie' per un prodotto in pz). NULL = u.m.
+                                       -- canonica del prodotto. Anche qui la garantisce
+                                       -- garantisci_colonna() a ogni avvio
 );
 
 -- Consumo: quale lotto è stato usato in quale produzione

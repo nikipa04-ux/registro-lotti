@@ -122,7 +122,8 @@ def dettaglio_produzione(lotto_id: int):
     con le quantità) e AVANTI (usato in), più l'etichetta calcolata."""
     with connessione() as conn:
         lotto = conn.execute(
-            "SELECT li.*, p.nome AS prodotto, p.unita_misura AS um, f.nome AS famiglia "
+            "SELECT li.*, p.nome AS prodotto, "
+            "COALESCE(li.um_prodotta, p.unita_misura) AS um, f.nome AS famiglia "
             "FROM lotti_interni li "
             "JOIN prodotti p ON p.id = li.prodotto_id "
             "LEFT JOIN famiglie f ON f.id = li.famiglia_id "
@@ -192,6 +193,8 @@ class NuovaProduzione(BaseModel):
     data_produzione: str  # ISO YYYY-MM-DD
     data_scadenza: str
     qta_prodotta: float | None = None
+    um_prodotta: str | None = None   # SNAPSHOT 'teglie'/'pz'...: solo tipi NON
+                                     # convertibili (stesso tipo: si converte prima)
     famiglia_id: int | None = None
     consumi: list[Consumo]
 
