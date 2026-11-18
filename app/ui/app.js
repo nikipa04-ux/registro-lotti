@@ -2549,6 +2549,7 @@ async function avviaProduttore() {
     const dati = await r.json();
     $("prod-ragione").value = dati.ragione_sociale || "";
     $("prod-indirizzo").value = dati.indirizzo || "";
+    $("prod-piva").value = dati.piva || "";
   } catch (e) {
     // server giù: i campi restano vuoti, l'utente riprova a salvare dopo
   }
@@ -2558,15 +2559,20 @@ async function avviaProduttore() {
 function aggiornaAnteprimaProduttore() {
   const ragione = $("prod-ragione").value.trim();
   const indirizzo = $("prod-indirizzo").value.trim();
+  const piva = $("prod-piva").value.trim();
+  // in fondo all'etichetta il recapito è UNA riga sola: indirizzo · P.IVA
+  const fondo = [indirizzo, piva ? "P.IVA " + piva : ""]
+    .filter(p => p).join(" · ");
   // l'anteprima parla subito: mostra il posto che i dati vanno a occupare
   $("ant-ragione").textContent = ragione || "(ragione sociale)";
   $("ant-ragione").classList.toggle("muted", !ragione);
-  $("ant-indirizzo").textContent = indirizzo || "(indirizzo)";
-  $("ant-indirizzo").classList.toggle("muted", !indirizzo);
+  $("ant-indirizzo").textContent = fondo || "(indirizzo · P.IVA)";
+  $("ant-indirizzo").classList.toggle("muted", !fondo);
 }
 
 $("prod-ragione").addEventListener("input", aggiornaAnteprimaProduttore);
 $("prod-indirizzo").addEventListener("input", aggiornaAnteprimaProduttore);
+$("prod-piva").addEventListener("input", aggiornaAnteprimaProduttore);
 
 $("prod-salva").addEventListener("click", async () => {
   const bottone = $("prod-salva");
@@ -2578,6 +2584,7 @@ $("prod-salva").addEventListener("click", async () => {
       body: JSON.stringify({
         ragione_sociale: $("prod-ragione").value,
         indirizzo: $("prod-indirizzo").value,
+        piva: $("prod-piva").value,
       }),
     });
     if (!r.ok) throw new Error("errore http");

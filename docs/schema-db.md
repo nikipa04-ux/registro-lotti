@@ -159,7 +159,8 @@ CREATE TABLE IF NOT EXISTS impostazioni (
     chiave TEXT PRIMARY KEY,
     valore TEXT
 );
--- chiavi note: 'produttore_ragione_sociale', 'produttore_indirizzo'
+-- chiavi note: 'produttore_ragione_sociale', 'produttore_indirizzo',
+-- 'produttore_piva'
 ```
 
 ## Indici per le query di tracciabilità

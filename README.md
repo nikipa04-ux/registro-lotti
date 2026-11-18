@@ -175,9 +175,9 @@ della ricetta, l'operatore al massimo corregge.
   Helvetica/Courier di base con accenti italiani (à è ì ò ù é). Ogni
   etichetta accompagna il prodotto: nome, lotto interno, prodotto il /
   scade il, ingredienti calcolati, allergeni in neretto (tutto nero) se
-  presenti; in cima la RAGIONE SOCIALE dell'attività e in fondo
-  l'indirizzo, se compilati nella sezione Produttore (Reg. UE 1169/2011:
-  l'etichetta dichiara chi ha prodotto e dove).
+  presenti; in cima la RAGIONE SOCIALE dell'attività e in fondo il
+  recapito (indirizzo · P.IVA), se compilati nella sezione Produttore
+  (Reg. UE 1169/2011: l'etichetta dichiara chi ha prodotto e dove).
   + bottone "🗑 Elimina" (annulla il verbale e ripristina le giacenze);
   il contenuto scrolla DENTRO la card (intestazione fissa, azioni sempre
   visibili)
@@ -323,18 +323,19 @@ ricetta (qui NON si tocca, al massimo la si apre).
 
 ### Produttore
 
-La pagina dei dati dell'attività che produce: **ragione sociale** e
-**indirizzo** finiscono sull'etichetta PDF (in cima e in fondo alla
-cella). Il produttore è UNO: niente anagrafica a più righe, una tabella
-`impostazioni` chiave/valore che crescerà con le esigenze (logo e altro
-più avanti).
+La pagina dei dati dell'attività che produce: **ragione sociale**,
+**indirizzo** e **P.IVA** finiscono sull'etichetta PDF (in cima e in
+fondo alla cella). Il produttore è UNO: niente anagrafica a più righe,
+una tabella `impostazioni` chiave/valore che crescerà con le esigenze
+(logo e altro più avanti).
 
-- **Card "La mia attività"**: ragione sociale + indirizzo (facoltativo),
-  salvataggio immediato (`PUT /api/impostazioni`, GET per leggerli)
+- **Card "La mia attività"**: ragione sociale + indirizzo + P.IVA
+  (facoltativi), salvataggio immediato (`PUT /api/impostazioni`,
+  GET per leggerli)
 - **Anteprima dal vivo dell'etichetta**: una cella uguale a quella che
   esce dal PDF (bordo tratteggiato = guida di taglio, monocromatica);
-  mentre scrivi la ragione sociale e l'indirizzo si aggiornano al loro
-  posto; il resto del contenuto è d'esempio
+  mentre scrivi ragione sociale, indirizzo e P.IVA si aggiornano al
+  loro posto; il resto del contenuto è d'esempio
 - Se i dati non sono compilati, l'etichetta esce senza le righe del
   produttore: niente di obbligatorio
 - Endpoint: GET/PUT `/api/impostazioni`

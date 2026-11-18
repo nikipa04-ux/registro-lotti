@@ -31,19 +31,22 @@ def conn():
 
 def test_produttore_vuoto_di_default(conn):
     """Mai compilato: stringhe vuote, niente righe di produttore in etichetta."""
-    assert leggi_produttore(conn) == {"ragione_sociale": "", "indirizzo": ""}
+    assert leggi_produttore(conn) == {
+        "ragione_sociale": "", "indirizzo": "", "piva": ""}
     pdf = etichetta_pdf(conn, 1, copie=1)
     assert b"Pasticceria" not in pdf
     assert b"Via Roma" not in pdf
+    assert b"P.IVA" not in pdf
 
 
 def test_salva_e_rilegge_produttore(conn):
     salva_produttore(conn, "  Pasticceria Dolce Vita di N. Panichi  ",
-                     "  Via Roma 12, 00100 Roma  ")
+                     "  Via Roma 12, 00100 Roma  ", " 01234567890 ")
     conn.commit()
     assert leggi_produttore(conn) == {
         "ragione_sociale": "Pasticceria Dolce Vita di N. Panichi",
         "indirizzo": "Via Roma 12, 00100 Roma",
+        "piva": "01234567890",
     }
     # il secondo giro sovrascrive (il produttore è UNO)
     salva_produttore(conn, "Pasticceria Nuova", "")
@@ -51,19 +54,21 @@ def test_salva_e_rilegge_produttore(conn):
     assert leggi_produttore(conn) == {
         "ragione_sociale": "Pasticceria Nuova",
         "indirizzo": "",   # l'indirizzo svuotato sparisce davvero
+        "piva": "",        # e la P.IVA anche
     }
 
 
 def test_etichetta_pdf_porta_il_produttore(conn):
-    """Ragione sociale in cima, indirizzo in fondo: su OGNI etichetta."""
+    """Ragione sociale in cima, recapito (indirizzo · P.IVA) in fondo:
+    su OGNI etichetta."""
     salva_produttore(conn, "Pasticceria Dolce Vita di N. Panichi",
-                     "Via Roma 12, 00100 Roma")
+                     "Via Roma 12, 00100 Roma", "01234567890")
     conn.commit()
     pdf = etichetta_pdf(conn, 1, copie=8)
     testo = pdf.decode("cp1252")
     assert testo.count("Pasticceria Dolce Vita di N. Panichi") == 8
-    assert testo.count("Via Roma 12, 00100 Roma") == 8
-    # la ragione sociale sta PRIMA del nome del prodotto, l'indirizzo DOPO
+    assert testo.count("Via Roma 12, 00100 Roma \xb7 P.IVA 01234567890") == 8
+    # la ragione sociale sta PRIMA del nome del prodotto, il recapito DOPO
     # gli ingredienti (la riga 'Contiene' non c'è: il latte non ha allergeni
     # dichiarati in questo scenario)
     assert testo.index("Pasticceria Dolce Vita") < testo.index("Lotto: ")
@@ -71,9 +76,20 @@ def test_etichetta_pdf_porta_il_produttore(conn):
 
 
 def test_etichetta_pdf_produttore_solo_ragione(conn):
-    """Indirizzo facoltativo: ragione sociale senza indirizzo regge."""
+    """Indirizzo e P.IVA facoltativi: la ragione sociale da sola regge."""
     salva_produttore(conn, "Dolce Vita", "")
     conn.commit()
     pdf = etichetta_pdf(conn, 1, copie=1)
     assert b"Dolce Vita" in pdf
     assert b"Via Roma" not in pdf
+    assert b"P.IVA" not in pdf
+
+
+def test_etichetta_pdf_solo_piva(conn):
+    """P.IVA senza indirizzo: il recapito è comunque una riga sola."""
+    salva_produttore(conn, "", "", "01234567890")
+    conn.commit()
+    pdf = etichetta_pdf(conn, 1, copie=1)
+    testo = pdf.decode("cp1252")
+    assert "P.IVA 01234567890" in testo
+    assert "Via Roma" not in testo

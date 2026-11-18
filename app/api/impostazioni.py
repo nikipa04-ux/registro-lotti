@@ -22,12 +22,14 @@ def leggi():
 class DatiProduttore(BaseModel):
     ragione_sociale: str = ""
     indirizzo: str = ""
+    piva: str = ""
 
 
 @router.put("")
 def salva(dati: DatiProduttore):
     """Salva i dati dell'attività: finiscono sull'etichetta del PDF."""
     with connessione() as conn:
-        risultato = salva_produttore(conn, dati.ragione_sociale, dati.indirizzo)
+        risultato = salva_produttore(
+            conn, dati.ragione_sociale, dati.indirizzo, dati.piva)
         conn.commit()
         return risultato

@@ -21,9 +21,9 @@ Contenuto di ogni etichetta (i dati CALCOLATI, nessuno snapshot):
   - allergeni: "Contiene:" in neretto, TUTTO NERO su richiesta di
     Nicolas (18/11): l'etichetta stampata resta monocromatica,
     solo se ce ne sono
-  - indirizzo dell'attività, in piccolo in fondo
+  - indirizzo dell'attività e P.IVA, in piccolo in fondo
 
-Se ragione sociale e indirizzo non sono stati compilati (sezione
+Se ragione sociale e recapiti non sono stati compilati (sezione
 Produttore), le righe spariscono: l'etichetta resta quella che è.
 """
 
@@ -159,11 +159,17 @@ def _blocchi_etichetta(dati, scala, max_larg):
         # monocromatica, il rosso non serve
         blocchi.append((
             "F2", 8.8 * scala, contiene, None))
-    # e dove trovarlo: l'indirizzo chiude l'etichetta, piccolo
-    if dati["indirizzo_produttore"]:
+    # e dove trovarlo: il recapito (indirizzo · P.IVA) chiude l'etichetta
+    fondo = " · ".join(
+        parte for parte in (
+            dati["indirizzo_produttore"],
+            ("P.IVA " + dati["piva_produttore"]) if dati["piva_produttore"] else "",
+        ) if parte
+    )
+    if fondo:
         blocchi.append((
             "F1", 7.5 * scala,
-            _spezza(dati["indirizzo_produttore"], "F1", 7.5 * scala, max_larg),
+            _spezza(fondo, "F1", 7.5 * scala, max_larg),
             None,
         ))
     return blocchi
@@ -219,6 +225,7 @@ def etichetta_pdf(conn, lotto_interno_id, copie=8):
         "allergeni": comp["allergeni"],
         "ragione_sociale": produttore["ragione_sociale"],
         "indirizzo_produttore": produttore["indirizzo"],
+        "piva_produttore": produttore["piva"],
     }
 
     if copie < 1:
