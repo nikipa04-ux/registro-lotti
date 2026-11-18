@@ -30,6 +30,7 @@ registro-lotti/
 │   │   ├── produzioni.py  #   proposta FEFO e verbale della produzione
 │   │   ├── ricette.py     #   il master: upsert ricetta, famiglia, righe
 │   │   ├── etichetta.py   #   lista ingredienti calcolata dai consumi
+│   │   ├── etichetta_pdf.py  # il PDF a griglia del foglio A4 (solo stdlib)
 │   │   ├── foodcost.py    #   costi: storico prezzi dagli arrivi
 │   │   └── dashboard.py   #   scadenze imminenti e contatori
 │   └── ui/                # interfaccia reale (dashboard + arrivi + produzioni)
@@ -165,6 +166,13 @@ della ricetta, l'operatore al massimo corregge.
   ("deriva da": i lotti consumati con le quantità) e AVANTI ("usato in"),
   etichetta ingredienti CALCOLATA dal verbale (denominazioni in ordine di
   peso, senza quantità) + "Contiene (allergeni):" dichiarazione degli allergeni
+  + bottone "🏷 Etichetta PDF": il foglio A4 con la GRIGLIA di etichette
+  pronte da stampare e tagliare (2 colonne x 4 righe = 8 per foglio, oltre
+  si aggiunge la pagina; parametro `?copie=N`, default 8). Il PDF nasce
+  dalla SOLA libreria standard Python: nessuna dipendenza nuova, font
+  Helvetica/Courier di base con accenti italiani (à è ì ò ù é). Ogni
+  etichetta accompagna il prodotto: nome, lotto interno, prodotto il /
+  scade il, ingredienti calcolati, allergeni in rosso se presenti.
   + bottone "🗑 Elimina" (annulla il verbale e ripristina le giacenze);
   il contenuto scrolla DENTRO la card (intestazione fissa, azioni sempre
   visibili)

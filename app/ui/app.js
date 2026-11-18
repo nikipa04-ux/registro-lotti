@@ -639,7 +639,12 @@ async function apriDettaglioProduzione(id) {
       "<ol class='etichetta'>" + righeEtich + "</ol>" + allergeni +
       "<h2 style='margin-top:14px'>Usato in</h2>" + usato +
       "<div class='f-azioni'>" +
+      '<button class="btn mini" id="prod-etichetta">🏷 Etichetta PDF</button>' +
       '<button class="btn sec mini rosso" id="prod-elimina">🗑 Elimina</button></div>';
+    // il PDF nasce già pronto: griglia di etichette sul foglio A4
+    $("prod-etichetta").addEventListener("click", () => {
+      window.open("/api/produzioni/" + id + "/etichetta.pdf", "_blank");
+    });
     $("prod-elimina").addEventListener("click", async () => {
       // eliminazione protetta: rifiutata se il lotto interno è consumato da altre produzioni
       if (!confirm("Eliminare la produzione " + l.codice_lotto + " (" + l.prodotto +

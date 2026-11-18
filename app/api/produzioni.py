@@ -6,11 +6,16 @@ La ricetta non si tocca mai.
 """
 from datetime import date
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 
 from ..db import connessione
 from ..logic.etichetta import etichetta
+from ..logic.etichetta_pdf import (
+    ErroreEtichetta,
+    etichetta_pdf,
+    nome_file_pdf,
+)
 from ..logic.produzioni import (
     ErroreProduzione,
     elimina_produzione,
@@ -82,6 +87,33 @@ def etichetta_lotto(lotto_id: int):
         # La quantità NON si mostra in etichetta: decide solo l'ordine.
         righe = [{"denominazione": r["denominazione"]} for r in risultato["righe"]]
         return {"righe": righe, "allergeni": risultato["allergeni"]}
+
+
+@router.get("/{lotto_id}/etichetta.pdf")
+def etichetta_pdf_lotto(lotto_id: int, copie: int = 8):
+    """Il foglio A4 con la GRIGLIA di etichette da stampare e tagliare.
+
+    2 colonne x 4 righe = 8 etichette per foglio; 'copie' decide quante
+    (oltre 8 la pagina successiva arriva da sola). Il PDF nasce dalla
+    sola libreria standard: nessuna dipendenza da installare.
+    """
+    with connessione() as conn:
+        try:
+            pdf = etichetta_pdf(conn, lotto_id, copie)
+            codice = conn.execute(
+                "SELECT codice_lotto AS c FROM lotti_interni WHERE id = ?",
+                (lotto_id,),
+            ).fetchone()["c"]
+        except ErroreEtichetta as e:
+            raise HTTPException(404, str(e))
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition":
+                    'inline; filename="%s"' % nome_file_pdf(codice),
+            },
+        )
 
 
 @router.get("/{lotto_id}")
