@@ -230,6 +230,13 @@ th.num, td.num { text-align: right; }
 .sel-aggiunta { flex: 1; min-width: 200px; padding: 8px 10px; font-size: 14px;
   border: 1px solid var(--amber); border-radius: 8px; background: #fff; color: var(--ink); }
 
+/* Cambio u.m. in produzione: accanto ai numeri, visibile solo quando la
+   conversione è ammessa (g<->kg, ml<->lt). Le u.m. libere restano badge. */
+.con-um { display: flex; gap: 8px; }
+.con-um input { flex: 1; }
+.con-um select { flex: none; min-width: 64px; }
+.rum-sel { flex: none; min-width: 52px; max-width: 64px; padding: 8px 6px; font-size: 13px; }
+
 ol.etichetta { margin: 6px 0 10px; padding-left: 22px; font-size: 13.5px; }
 ol.etichetta li { margin-bottom: 3px; }
 

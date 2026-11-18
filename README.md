@@ -195,6 +195,8 @@ della ricetta, l'operatore al massimo corregge.
      alla proposta FEFO, già pronta da salvare
   2. la proposta FEFO: una riga per ingrediente di ricetta con i chip dei
      lotti proposti (stesso ordine FEFO del server, quantità modificabile,
+     u.m. della riga cambiabile dentro lo stesso gruppo (g<->kg, ml<->lt):
+     il numero si riconverte da solo, il verbale resta in u.m. canonica,
      riga escludibile ✕/↩), righe aggiungibili fuori ricetta (ingredienti
      acquistati e prodotti di laboratorio), alert rosso se manca merce;
      il bottone **⚖ Assegna lotti** per riga apre un pannello dove l'operatore
@@ -207,7 +209,8 @@ della ricetta, l'operatore al massimo corregge.
      marca e prezzi si completano in Arrivi), entra nella riga e la FEFO
      copre il resto: la tracciabilità resta intatta, il verbale scarica
      un lotto che esiste davvero
-  3. date e quantità prodotta (default = resa della ricetta) → salva
+  3. date e quantità prodotta (default = resa della ricetta; anche qui si
+     cambia u.m. dentro lo stesso gruppo: pesi in g, si salva in kg) → salva
 
 Al salvataggio il server RIVALIDA tutto (`app/logic/produzioni.py`):
 giacenze sufficienti, consumi non vuoti (il verbale), niente lotto ripetuto,

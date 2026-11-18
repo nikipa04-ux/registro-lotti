@@ -412,7 +412,10 @@
       </div>
       <div class="f-campo">
         <label for="np-qta">Quantità prodotta <span id="np-um" class="um"></span></label>
-        <input id="np-qta" type="number" step="0.001" min="0">
+        <div class="con-um">
+          <input id="np-qta" type="number" step="0.001" min="0">
+          <select id="np-qta-um" hidden title="Cambia u.m.: il numero si riconverte da solo (g↔kg, ml↔lt); si salva in u.m. canonica"></select>
+        </div>
       </div>
     </div>
 

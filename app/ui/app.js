@@ -682,12 +682,26 @@ let RIGHE = [];         // stato delle righe (ricetta + aggiunte), il verbale
 let PANNELLO_ASSEGNA = null;   // indice della riga con il pannello "Assegna lotti" aperto
 let RICETTA_DA_PRODUZIONE = null;  // prodotto_id quando la ricetta nasce dal form produzione
 
+/* u.m. della QUANTITÀ PRODOTTA: NP_UM è quella CANONICA del prodotto,
+   NP_UM_SCELTA quella con cui l'operatore pesa. Uguali = niente da fare.
+   La conversione è la stessa regola di um.py: solo g<->kg e ml<->lt. */
+let NP_UM = null, NP_UM_SCELTA = null;
+
+function popolaUmQta(um) {
+  NP_UM = um || null;
+  NP_UM_SCELTA = NP_UM;
+  const opzioni = NP_UM ? opzioniUm(NP_UM, NP_UM) : "";
+  $("np-qta-um").innerHTML = opzioni;
+  $("np-qta-um").hidden = !opzioni;   // u.m. libera (pz, teglie): niente da convertire
+}
+
 function apriFormProduzione() {
   $("overlay-produzione").hidden = false;
   $("np-errore").hidden = true;
   PROPOSTA = null;
   RIGHE = [];
   PANNELLO_ASSEGNA = null;
+  popolaUmQta("");   // il prodotto non si sa ancora: niente u.m. da offrire
   $("np-prodotto").value = "";
   $("np-prodotto-id").value = "";
   $("np-hint").hidden = true;
@@ -709,6 +723,15 @@ $("btn-nuova-produzione-dash").addEventListener("click", () => { mostraSezione("
 $("np-annulla").addEventListener("click", chiudiFormProduzione);
 $("overlay-produzione").addEventListener("click", (e) => { if (e.target === e.currentTarget) chiudiFormProduzione(); });
 
+// cambio u.m. della quantità prodotta: il numero si riconverte da solo
+$("np-qta-um").addEventListener("change", () => {
+  const nuova = $("np-qta-um").value;
+  const f = fattoreUm(NP_UM_SCELTA, nuova);
+  NP_UM_SCELTA = nuova;
+  const q = Number($("np-qta").value);
+  if (q > 0 && f != null) $("np-qta").value = num3(q * f);
+});
+
 creaCombo({
   input: $("np-prodotto"), tendina: $("dd-npprod"),
   idNascosto: $("np-prodotto-id"),
@@ -718,6 +741,7 @@ creaCombo({
   pool: () => PRODUCIBILI,
   onPick: (p) => {
     $("np-um").textContent = p.unita_misura ? "(" + p.unita_misura + ")" : "";
+    popolaUmQta(p.unita_misura);
     caricaProposta(p.id);
   },
   onCrea: (nome) => {
@@ -752,6 +776,7 @@ $("qc-npprod-crea").addEventListener("click", async () => {
     $("np-prodotto-id").value = String(corpo.id);
     $("np-prodotto").value = corpo.nome;
     $("np-um").textContent = corpo.unita_misura ? "(" + corpo.unita_misura + ")" : "";
+    popolaUmQta(corpo.unita_misura);
     // il prodotto esiste ma senza ricetta: la proposta lo dirà e offrirà il ➕
     caricaProposta(corpo.id);
   } catch (e) {
@@ -782,6 +807,47 @@ function splitFefo(lotti, qta) {
     residuo -= presa;
   }
   return { assegnazioni, mancante: Math.max(0, residuo) };
+}
+
+/* ---- u.m.: la regola di um.py vale anche qui. Si converte SOLO dentro
+   lo stesso gruppo (g<->kg, ml<->lt), mai fra tipi diversi e mai per le
+   u.m. libere (pz, teglie, vasetti). Il verbale viaggia SEMPRE in u.m.
+   canonica: la u.m. scelta serve solo a chi guarda la bilancia. ---- */
+
+const GRUPPO_UM = { g: "massa", kg: "massa", ml: "volume", lt: "volume" };
+const PESO_UM = { g: 1, kg: 1000, ml: 1, lt: 1000 };
+const FRATELLO_UM = { g: "kg", kg: "g", ml: "lt", lt: "ml" };
+
+function fattoreUm(da, a) {
+  if (!GRUPPO_UM[da] || !GRUPPO_UM[a] || GRUPPO_UM[da] !== GRUPPO_UM[a]) return null;
+  return PESO_UM[da] / PESO_UM[a];
+}
+
+function num3(x) {
+  // il numero riconvertito non trascina dietro decinali fantasma
+  const v = Math.round(x * 1000) / 1000;
+  return v ? String(Number(v.toFixed(3))) : "";
+}
+
+function opzioniUm(um, scelta) {
+  const fratello = FRATELLO_UM[um];
+  if (!fratello) return "";   // u.m. libera: nessuna conversione ammessa
+  return '<option value="' + um + '"' + (scelta === um ? " selected" : "") + ">" + um + "</option>" +
+    '<option value="' + fratello + '"' + (scelta === fratello ? " selected" : "") + ">" + fratello + "</option>";
+}
+
+function selUmRiga(i, riga) {
+  // nella riga: select quando esiste il fratello, badge grigia se no
+  const opzioni = opzioniUm(riga.um, riga.umSel);
+  return opzioni
+    ? '<select data-rum="' + i + '" class="rum-sel" title="Cambia u.m. della riga: il numero si riconverte da solo, il verbale resta in u.m. canonica">' + opzioni + "</select>"
+    : '<span class="badge b-gray">' + esc(riga.um || "") + "</span>";
+}
+
+function qtaVista(riga) {
+  // il numero mostrato è nella u.m. SCELTA, riga.qta resta sempre canonica
+  if (!riga.qta || !riga.umSel || riga.umSel === riga.um) return riga.qta || "";
+  return num3(riga.qta * fattoreUm(riga.um, riga.umSel));
 }
 
 // La FEFO è la PROPOSTA; l'assegnazione A MANO è l'eccezione scelta
@@ -854,8 +920,8 @@ function renderRighe() {
     }
     html += '<div class="riga">' +
       '<div class="riga-testa">' +
-      '<input type="number" step="0.001" min="0" value="' + (riga.qta || "") + '" data-qta="' + i + '" class="qta-input">' +
-      '<b>' + esc(r.nome) + '</b> <span class="badge b-gray">' + esc(r.um || "") + "</span>" +
+      '<input type="number" step="0.001" min="0" value="' + qtaVista(riga) + '" data-qta="' + i + '" class="qta-input">' +
+      '<b>' + esc(r.nome) + '</b> ' + selUmRiga(i, riga) +
       (r.famiglia ? ' <span class="badge b-gray">' + esc(r.famiglia) + "</span>" : "") +
       '<span class="muted">da ricetta: ' + fmt(r.qta_ricetta) + "</span>" +
       '<button class="btn sec mini" data-assegna="' + i + '" title="Scegli tu quali lotti usare (e quanto da ciascuno), oppure registra al volo un lotto non in elenco">⚖ Assegna lotti</button>' +
@@ -881,8 +947,8 @@ function renderRighe() {
     }
     html += '<div class="riga aggiunta">' +
       '<div class="riga-testa">' +
-      '<input type="number" step="0.001" min="0" value="' + (r.qta || "") + '" data-qta="' + i + '" class="qta-input">' +
-      "<b>" + esc(r.nome) + '</b> <span class="badge b-gray">' + esc(r.um || "") + "</span>" +
+      '<input type="number" step="0.001" min="0" value="' + qtaVista(r) + '" data-qta="' + i + '" class="qta-input">' +
+      "<b>" + esc(r.nome) + '</b> ' + selUmRiga(i, r) +
       '<span class="badge b-amber">aggiunta</span>' +
       (r.nome ? '<button class="btn sec mini" data-assegna="' + i + '" title="Scegli tu quali lotti usare (e quanto da ciascuno), oppure registra al volo un lotto non in elenco">⚖ Assegna lotti</button>' : "") +
       '<button class="btn sec mini rosso" data-escludi="' + i + '" title="Rimuovi aggiunta">✕</button>' +
@@ -896,9 +962,21 @@ function renderRighe() {
 
   cont.querySelectorAll("[data-qta]").forEach(inp =>
     inp.addEventListener("input", () => {
-      RIGHE[Number(inp.dataset.qta)].qta = Number(inp.value) || 0;
+      const r = RIGHE[Number(inp.dataset.qta)];
+      // il numero digitato è nella u.m. SCELTA: il verbale (chips, FEFO,
+      // scarico) lavora sempre in u.m. CANONICA
+      const f = r.umSel && r.umSel !== r.um ? fattoreUm(r.umSel, r.um) || 1 : 1;
+      r.qta = (Number(inp.value) || 0) * f;
       const chips = cont.querySelector('[data-chips="' + inp.dataset.qta + '"]');
-      if (chips) chips.innerHTML = chipsDi(RIGHE[Number(inp.dataset.qta)]);
+      if (chips) chips.innerHTML = chipsDi(r);
+    }));
+  cont.querySelectorAll("[data-rum]").forEach(sel =>
+    sel.addEventListener("change", () => {
+      const r = RIGHE[Number(sel.dataset.rum)];
+      r.umSel = sel.value;
+      // il numero si riconverte alla nuova u.m., riga.qta non cambia affatto
+      const inp = cont.querySelector('[data-qta="' + sel.dataset.rum + '"]');
+      if (inp) inp.value = qtaVista(r);
     }));
   cont.querySelectorAll("[data-escludi]").forEach(btn =>
     btn.addEventListener("click", () => {
@@ -915,6 +993,7 @@ function renderRighe() {
       if (!p) return;   // "— scegli ingrediente —" rimane
       RIGHE[i].nome = p.nome;
       RIGHE[i].um = p.unita_misura;
+      RIGHE[i].umSel = p.unita_misura || "";   // la u.m. scelta riparte dall'anagrafica
       RIGHE[i].ingrediente_id = p.id;   // serve al pannello ⚖ (registra lotto al volo)
       RIGHE[i].assegnazioni = null;   // lotti nuovi: si riparte dalla FEFO
       PANNELLO_ASSEGNA = null;
@@ -990,7 +1069,7 @@ function renderRighe() {
 function aggiungiRiga() {
   // Riga aggiunta "in attesa": l'operatore sceglie l'ingrediente dal select
   // renderizzato da renderRighe (così sopravvive a ogni re-render finché non sceglie)
-  RIGHE.push({ fonte: "aggiunta", nome: null, um: "", lotti: [], qta: 0, attiva: true });
+  RIGHE.push({ fonte: "aggiunta", nome: null, um: "", lotti: [], qta: 0, attiva: true, umSel: null });
   renderRighe();
 }
 
@@ -1206,7 +1285,7 @@ async function caricaProposta(prodotto_id) {
       return;
     }
     PROPOSTA = dati;
-    RIGHE = dati.righe.map(r => ({ ...r, qta: r.qta_ricetta, attiva: true, fonte: "ricetta" }));
+    RIGHE = dati.righe.map(r => ({ ...r, qta: r.qta_ricetta, attiva: true, fonte: "ricetta", umSel: r.um || null }));
     PANNELLO_ASSEGNA = null;
     // Prezzo di default della quantità prodotta: la resa della ricetta
     const resa = parseFloat((dati.ricetta.resa || "").replace(",", "."));
@@ -1225,7 +1304,11 @@ function mostraErroreProduzione(testo) {
 async function salvaProduzione() {
   if (!$("np-prodotto-id").value) return mostraErroreProduzione("Scegli il prodotto da produrre.");
   if (!$("np-data").value || !$("np-scadenza").value) return mostraErroreProduzione("Inserisci data di produzione e di scadenza.");
-  const qtaProdotta = $("np-qta").value === "" ? null : Number($("np-qta").value);
+  // il numero digitato è nella u.m. SCELTA: al server arriva in u.m. CANONICA
+  const fattoreQta = NP_UM && NP_UM_SCELTA && NP_UM_SCELTA !== NP_UM ? fattoreUm(NP_UM_SCELTA, NP_UM) : 1;
+  const qtaProdotta = $("np-qta").value === ""
+    ? null
+    : Number($("np-qta").value) * (fattoreQta || 1);
   if (qtaProdotta !== null && qtaProdotta <= 0) return mostraErroreProduzione("La quantità prodotta deve essere maggiore di zero.");
 
   // Il verbale: consumi calcolati con la stessa FEFO mostrata,
