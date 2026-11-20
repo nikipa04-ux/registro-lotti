@@ -1,0 +1,7 @@
+# Ambienti e prodotti di build della versione portabile
+.venv-build/
+__pycache__/
+
+# Pacchetto senza exe e download di build
+RegistroLotti/
+downloads/
