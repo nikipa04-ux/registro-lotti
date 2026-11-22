@@ -12,6 +12,7 @@ from datetime import date
 
 from .fefo import copertura_fefo, ordina_fefo
 from .lotti import genera_codice
+from . import um
 
 
 class ErroreProduzione(ValueError):
@@ -56,7 +57,12 @@ def lotti_disponibili(conn, ingrediente_id, oggi=None):
         "li.data_produzione AS data_arrivo, li.qta_prodotta AS quantita_residua, "
         "'interno' AS origine, NULL AS fornitore "
         "FROM lotti_interni li "
-        "WHERE li.prodotto_id = ? AND li.data_scadenza >= ?",
+        "JOIN prodotti p ON p.id = li.prodotto_id "
+        "WHERE li.prodotto_id = ? AND li.data_scadenza >= ? "
+        # un lotto prodotto in u.m. NON convertibile (es. 6 teglie di un
+        # prodotto in pz) non si traduce in giacenza canonica: la FEFO non
+        # lo propone (regola di progetto: nessuna conversione fra tipi)
+        "AND (li.um_prodotta IS NULL OR li.um_prodotta = p.unita_misura)",
         (ingrediente_id, oggi.isoformat()),
     ).fetchall():
         lotti.append(dict(r))
@@ -152,7 +158,9 @@ def registra_produzione(conn, dati):
     dati: prodotto_id, data_produzione, data_scadenza (ISO), consumi
           [{origine, lotto_origine_id, quantita_usata}], qta_prodotta?,
           famiglia_id? (default: snapshot dalla ricetta).
-    Ritorna il dict del lotto interno creato (con nome prodotto).
+    Ritorna il dict del lotto interno creato (con nome prodotto e lo
+    snapshot ricetta_modificata: 1 se il verbale ha usato un insieme di
+    ingredienti diverso dalle righe della ricetta master).
     """
     prodotto_id = dati.get("prodotto_id")
     prodotto = conn.execute(
@@ -188,6 +196,19 @@ def registra_produzione(conn, dati):
         if qta_prodotta <= 0:
             raise ErroreProduzione("La quantità prodotta deve essere maggiore di zero")
 
+    # SNAPSHOT u.m.: 6 teglie di un prodotto in pz (tipi diversi non si
+    # convertono). La conversione g<->kg / ml<->lt spetta a CHI CHIAMA
+    # (la UI lo fa da sola): se arriva un'um CONVERTIBILE questa API non
+    # converte di nascosto, rifiuta.
+    um_prodotta = (dati.get("um_prodotta") or "").strip() or None
+    if um_prodotta and um_prodotta == prodotto["unita_misura"]:
+        um_prodotta = None
+    if um_prodotta and um.fattore(um_prodotta, prodotto["unita_misura"]) is not None:
+        raise ErroreProduzione(
+            f"La quantità prodotta va CONVERTITA in {prodotto['unita_misura']} "
+            f"prima del salvataggio (u.m. '{um_prodotta}' dello stesso tipo)"
+        )
+
     consumi = dati.get("consumi") or []
     if not consumi:
         raise ErroreProduzione(
@@ -196,6 +217,9 @@ def registra_produzione(conn, dati):
 
     scarico = {}   # lotto ingresso -> totale prelevato
     visti = set()  # (origine, lotto): il verbale non ripete lo stesso lotto
+    usati = set()  # prodotti (ingredienti) toccati dal verbale: serve allo
+                   # snapshot "ricetta modificata" qui sotto
+
     for c in consumi:
         origine = c.get("origine")
         lotto_id = c.get("lotto_origine_id")
@@ -216,6 +240,7 @@ def registra_produzione(conn, dati):
             ).fetchone()
             if not lotto:
                 raise ErroreProduzione("Lotto in ingresso inesistente")
+            usati.add(lotto["prodotto_id"])
             scarico[lotto_id] = scarico.get(lotto_id, 0.0) + qta
         else:
             lotto = conn.execute(
@@ -223,6 +248,7 @@ def registra_produzione(conn, dati):
             ).fetchone()
             if not lotto:
                 raise ErroreProduzione("Lotto interno inesistente")
+            usati.add(lotto["prodotto_id"])
 
     for lotto_id, qta in scarico.items():
         residua = conn.execute(
@@ -232,6 +258,19 @@ def registra_produzione(conn, dati):
             raise ErroreProduzione(
                 f"Giacenza insufficiente: servono {qta:g}, nel lotto ce ne sono {residua:g}"
             )
+
+    # RICETTA MODIFICATA (SNAPSHOT): l'insieme degli ingredienti USATI
+    # differisce dalle righe della ricetta master? Le quantità corrette non
+    # contano (l'operatore corregge di continuo); un ingrediente AGGIUNTO o
+    # una riga ESCLUSA sì. Il confronto avviene QUI, al verbale: la ricetta
+    # può cambiare nei giorni dopo, il lotto dice com'è andata quel giorno.
+    della_ricetta = {
+        r["ingrediente_id"] for r in conn.execute(
+            "SELECT ingrediente_id FROM ricette_righe WHERE ricetta_id = ?",
+            (ricetta["id"],),
+        ).fetchall()
+    }
+    ricetta_modificata = 1 if usati != della_ricetta else 0
 
     # Famiglia SNAPSHOT: quella della ricetta master (la produzione può
     # dichiararne una diversa, che vale solo per questo lotto)
@@ -245,8 +284,10 @@ def registra_produzione(conn, dati):
     codice = genera_codice(conn, dict(prodotto), data_produzione)
     cur = conn.execute(
         "INSERT INTO lotti_interni (prodotto_id, famiglia_id, qta_prodotta, "
-        "codice_lotto, data_produzione, data_scadenza) VALUES (?, ?, ?, ?, ?, ?)",
-        (prodotto_id, famiglia_id, qta_prodotta, codice, data_produzione, data_scadenza),
+        "codice_lotto, data_produzione, data_scadenza, ricetta_modificata, "
+        "um_prodotta) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (prodotto_id, famiglia_id, qta_prodotta, codice, data_produzione,
+         data_scadenza, ricetta_modificata, um_prodotta),
     )
     lotto_interno_id = cur.lastrowid
     for c in consumi:

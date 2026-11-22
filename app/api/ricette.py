@@ -2,7 +2,7 @@
 
 Le regole vivono in app/logic/ricette.py; qui si ricevono le richieste.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 
 from ..db import connessione
@@ -22,6 +22,25 @@ def lista(testo: str = ""):
     """Tutte le ricette (ricerca per nome prodotto)."""
     with connessione() as conn:
         return lista_ricette(conn, testo)
+
+
+@router.get("/libro.pdf")
+def libro_pdf():
+    """Il libro ricette in PDF (HACCP): per ogni prodotto gli ingredienti
+    con le quantità per resa e gli allergeni calcolati (i semilavorati
+    ereditano in ricorsione). Nasce dalla sola libreria standard.
+    """
+    from ..logic.libro_ricette_pdf import libro_ricette_pdf
+
+    with connessione() as conn:
+        pdf = libro_ricette_pdf(conn)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": 'inline; filename="libro-ricette.pdf"',
+        },
+    )
 
 
 @router.get("/{prodotto_id}")

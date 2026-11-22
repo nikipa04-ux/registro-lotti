@@ -11,13 +11,17 @@ from ..db import connessione
 from ..logic.anagrafiche import (
     ErroreAnagrafica,
     crea_ingrediente,
+    crea_unita,
     dettaglio_fornitore,
     dettaglio_prodotto,
     elimina_fornitore,
     elimina_prodotto,
+    elimina_unita,
     lista_ingredienti,
     lista_prodotti as lista_prodotti_lab,
+    lista_unita,
     rinomina_famiglia,
+    rinomina_unita,
     salva_fornitore,
     salva_prodotto,
 )
@@ -296,4 +300,55 @@ def elimina_famiglia(famiglia_id: int):
         if usata:
             raise HTTPException(409, f"Famiglia in uso da {usata} prodotti: eliminazione bloccata")
         conn.execute("DELETE FROM famiglie WHERE id = ?", (famiglia_id,))
+        conn.commit()
+
+
+# ---- Unità di misura (RIFIN 34) ----
+# Le 4 di sistema (g/kg/ml/lt) sono protette dalla LOGIC: alimentano le
+# conversioni di um.py. Rinominare una u.m. libera propaga il nome ai
+# prodotti che la usano; i lotti prodotti restano con lo snapshot storico.
+
+@router.get("/unita-misura")
+def lista_unita_misura():
+    with connessione() as conn:
+        return lista_unita(conn)
+
+
+class NuovaUnita(BaseModel):
+    nome: str
+
+
+@router.post("/unita-misura", status_code=201)
+def crea_unita_misura(dati: NuovaUnita):
+    with connessione() as conn:
+        try:
+            u = crea_unita(conn, dati.nome)
+        except ErroreAnagrafica as e:
+            _errore(e)
+        conn.commit()
+        return u
+
+
+class RinominaUnita(BaseModel):
+    nome: str
+
+
+@router.put("/unita-misura/{unita_id}")
+def rinomina_unita_misura(unita_id: int, dati: RinominaUnita):
+    with connessione() as conn:
+        try:
+            u = rinomina_unita(conn, unita_id, dati.nome)
+        except ErroreAnagrafica as e:
+            _errore(e)
+        conn.commit()
+        return u
+
+
+@router.delete("/unita-misura/{unita_id}", status_code=204)
+def elimina_unita_misura(unita_id: int):
+    with connessione() as conn:
+        try:
+            elimina_unita(conn, unita_id)
+        except ErroreAnagrafica as e:
+            _errore(e)
         conn.commit()

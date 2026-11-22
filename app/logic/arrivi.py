@@ -124,3 +124,68 @@ def elimina_arrivo(conn, arrivo_id):
             "Correggi piuttosto annullando quella produzione."
         )
     conn.execute("DELETE FROM lotti_ingresso WHERE id = ?", (arrivo_id,))
+
+
+def azzera_lotto(conn, arrivo_id, oggi=None):
+    """Azzeramento MANUALE della residua di un lotto in ingresso (RIFIN 38).
+
+    Deroga controllata alla regola "il magazzino si legge": l'ingrediente
+    è uscito dal circuito del registro con un consumo NON di produzione
+    (il classico: il latte finito anche al bar per i cappuccini). La
+    residua va a 0 ma il lotto NON si cancella: resta per la tracciabilità,
+    con la data di chiusura scritta qui. La residua che c'era PRIMA si
+    fotografa in residua_pre_azzeramento (RIFIN 39): serve al ripristino
+    se l'azzeramento era stato uno sbaglio.
+    """
+    lotto = conn.execute(
+        "SELECT codice_lotto, quantita_residua FROM lotti_ingresso WHERE id = ?",
+        (arrivo_id,),
+    ).fetchone()
+    if not lotto:
+        raise ErroreArrivo("Lotto in arrivo inesistente")
+    if not lotto["quantita_residua"]:
+        raise ErroreArrivo("Il lotto è già a zero: niente da azzerare.")
+    if oggi is None:
+        oggi = date.today()
+    if isinstance(oggi, str):
+        oggi = date.fromisoformat(oggi)
+    # nel SET gli expression leggono i valori VECCHI: la foto parte dalla
+    # residua com'era prima di questo UPDATE, tutto in una sola scrittura
+    conn.execute(
+        "UPDATE lotti_ingresso SET residua_pre_azzeramento = quantita_residua, "
+        "quantita_residua = 0, data_esaurimento = ? WHERE id = ?",
+        (oggi.isoformat(), arrivo_id),
+    )
+
+
+def ripristina_lotto(conn, arrivo_id):
+    """RIPRISTINO di un lotto azzerato a mano (RIFIN 39): eri stato tu.
+
+    Annulla l'azzeramento riportando la residua com'era prima (la foto in
+    residua_pre_azzeramento); se la foto manca (lotti azzerati prima
+    della RIFIN 39) si torna alla quantità originale d'arrivo. La data di esaurimento si pulisce: il
+    lotto esce da "Esauriti" e rientra in giacenza.
+
+    Rifiutato se il lotto NON è stato azzerato a mano: un lotto chiuso
+    dai consumi delle produzioni si corregge annullando quella produzione
+    (la tracciabilità non si riscrive).
+    """
+    lotto = conn.execute(
+        "SELECT codice_lotto, quantita, data_esaurimento, residua_pre_azzeramento "
+        "FROM lotti_ingresso WHERE id = ?",
+        (arrivo_id,),
+    ).fetchone()
+    if not lotto:
+        raise ErroreArrivo("Lotto in arrivo inesistente")
+    if lotto["data_esaurimento"] is None:
+        raise ErroreArrivo(
+            "Questo lotto non è stato azzerato a mano: niente da ripristinare."
+        )
+    residua = lotto["residua_pre_azzeramento"]
+    if residua is None:
+        residua = lotto["quantita"] or 0
+    conn.execute(
+        "UPDATE lotti_ingresso SET quantita_residua = ?, data_esaurimento = NULL, "
+        "residua_pre_azzeramento = NULL WHERE id = ?",
+        (residua, arrivo_id),
+    )

@@ -1,7 +1,10 @@
 import pytest
 
 from app import db
-from app.logic.arrivi import ErroreArrivo, elimina_arrivo, registra_arrivo
+from app.logic.arrivi import (
+    ErroreArrivo, azzera_lotto, elimina_arrivo, registra_arrivo,
+    ripristina_lotto,
+)
 
 
 @pytest.fixture()
@@ -132,3 +135,91 @@ def test_elimina_arrivo_protetta_se_consumato(conn):
         elimina_arrivo(conn, lotto["id"])
     n = conn.execute("SELECT COUNT(*) FROM lotti_ingresso").fetchone()[0]
     assert n == 1  # il lotto resta: la tracciabilità non si riscrive
+
+
+# --------- azzeramento manuale della residua (RIFIN 38, es. il bar) ---------
+
+def test_azzeramento_porta_residua_a_zero_e_scrive_la_data(conn):
+    lotto = registra_arrivo(conn, arrivo())
+    azzera_lotto(conn, lotto["id"], oggi="2026-11-18")
+    riga = conn.execute(
+        "SELECT quantita_residua, data_esaurimento FROM lotti_ingresso WHERE id = ?",
+        (lotto["id"],),
+    ).fetchone()
+    assert riga["quantita_residua"] == 0
+    assert riga["data_esaurimento"] == "2026-11-18"
+    # il lotto NON si cancella: la tracciabilità resta
+    n = conn.execute("SELECT COUNT(*) FROM lotti_ingresso").fetchone()[0]
+    assert n == 1
+
+
+def test_azzeramento_doppio_respinge(conn):
+    lotto = registra_arrivo(conn, arrivo())
+    azzera_lotto(conn, lotto["id"], oggi="2026-11-18")
+    with pytest.raises(ErroreArrivo, match="già"):
+        azzera_lotto(conn, lotto["id"], oggi="2026-11-18")
+
+
+def test_azzeramento_lotto_inesistente_respinge(conn):
+    with pytest.raises(ErroreArrivo):
+        azzera_lotto(conn, 999, oggi="2026-11-18")
+
+
+# ---- ripristino di un lotto azzerato a mano (RIFIN 39: era uno sbaglio) ----
+
+def test_ripristino_riporta_la_residua_fotografata_prima_dell_azzeramento(conn):
+    lotto = registra_arrivo(conn, arrivo())
+    # azzera la foto non parte da 10 ma dalla residua REALE (qui 4)
+    conn.execute("UPDATE lotti_ingresso SET quantita_residua = 4 WHERE id = ?",
+                 (lotto["id"],))
+    conn.commit()
+    azzera_lotto(conn, lotto["id"], oggi="2026-11-18")
+    ripristina_lotto(conn, lotto["id"])
+    riga = conn.execute(
+        "SELECT quantita_residua, data_esaurimento, residua_pre_azzeramento "
+        "FROM lotti_ingresso WHERE id = ?", (lotto["id"],),
+    ).fetchone()
+    assert riga["quantita_residua"] == 4        #NON 10: la foto era 4
+    assert riga["data_esaurimento"] is None    # fuori da "Esauriti"
+    assert riga["residua_pre_azzeramento"] is None  # la foto si consuma
+    # e si può azzerare DI NUOVO: nasce una foto fresca
+    azzera_lotto(conn, lotto["id"], oggi="2026-11-19")
+    riga2 = conn.execute(
+        "SELECT quantita_residua, residua_pre_azzeramento FROM lotti_ingresso WHERE id = ?",
+        (lotto["id"],),
+    ).fetchone()
+    assert riga2["quantita_residua"] == 0
+    assert riga2["residua_pre_azzeramento"] == 4
+
+
+def test_ripristino_senza_foto_torna_alla_quantita_originale(conn):
+    # lotti azzerati PRIMA della RIFIN 39: niente foto, si torna a quantita
+    lotto = registra_arrivo(conn, arrivo())
+    conn.execute(
+        "UPDATE lotti_ingresso SET quantita_residua = 0, data_esaurimento = '2026-11-18' "
+        "WHERE id = ?", (lotto["id"],),
+    )
+    conn.commit()
+    ripristina_lotto(conn, lotto["id"])
+    riga = conn.execute(
+        "SELECT quantita_residua, data_esaurimento FROM lotti_ingresso WHERE id = ?",
+        (lotto["id"],),
+    ).fetchone()
+    assert riga["quantita_residua"] == 10
+    assert riga["data_esaurimento"] is None
+
+
+def test_ripristino_lotto_mai_azzerato_respinge(conn):
+    lotto = registra_arrivo(conn, arrivo())
+    with pytest.raises(ErroreArrivo, match="non è stato azzerato"):
+        ripristina_lotto(conn, lotto["id"])
+    # anche il doppio ripristino è respinto: la foto si consuma al primo
+    azzera_lotto(conn, lotto["id"], oggi="2026-11-18")
+    ripristina_lotto(conn, lotto["id"])
+    with pytest.raises(ErroreArrivo, match="non è stato azzerato"):
+        ripristina_lotto(conn, lotto["id"])
+
+
+def test_ripristino_lotto_inesistente_respinge(conn):
+    with pytest.raises(ErroreArrivo):
+        ripristina_lotto(conn, 999)

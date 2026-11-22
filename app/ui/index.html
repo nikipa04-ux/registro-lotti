@@ -9,8 +9,7 @@
 <body>
 <div class="layout">
 
-  <!-- Navigazione (stessa del prototipo). Le sezioni non ancora costruite
-       restano disabilitate: si accendono una capitolo alla volta. -->
+  <!-- Navigazione (stessa del prototipo). -->
   <aside>
     <div class="logo">Registro Lotti<small>gestione lotti e scadenze</small></div>
     <nav>
@@ -18,8 +17,8 @@
       <button data-sez="arrivi">📥 Arrivi</button>
       <button data-sez="produzioni">🏭 Produzioni</button>
       <button data-sez="ricette">📋 Ricette</button>
-      <button class="disabled" title="Prossimo capitolo">⏰ Scadenze<small>presto</small></button>
-      <button class="disabled" title="Prossimo capitolo">📦 Magazzino<small>presto</small></button>
+      <button data-sez="scadenze">⏰ Scadenze</button>
+      <button data-sez="magazzino">📦 Magazzino</button>
       <button data-sez="anagrafiche">📇 Anagrafiche</button>
       <button data-sez="produttore">🏠 Produttore</button>
     </nav>
@@ -83,6 +82,7 @@
         <input id="cerca-ricette" type="search" placeholder="Cerca prodotto…">
         <span id="contatore-ricette" class="muted"></span>
         <button class="btn" id="btn-nuova-ricetta">+ Nuova ricetta</button>
+        <button class="btn sec" id="btn-libro-ricette" title="Tutte le ricette con ingredienti e allergeni, da stampare">🖨 PDF libro ricette</button>
       </div>
 
       <div class="card">
@@ -139,6 +139,19 @@
         <div class="hint">Le famiglie si usano in ricette e produzioni. Rinominare qui aggiorna ovunque; eliminare è possibile solo se nessun prodotto la usa.</div>
       </div>
 
+      <div class="card">
+        <div class="card-head"><h2>⚖️ Unità di misura <span class="badge b-gray" id="anag-conta-um"></span></h2>
+          <button class="btn sec" id="anag-um-nuovo">+ Nuova</button></div>
+        <div class="anag-fam-riga" id="anag-um-nuova-riga" hidden>
+          <input id="um-nuova-nome" type="text" placeholder="Nome della nuova u.m. (es. vassoi)…" autocomplete="off">
+          <button class="btn" id="um-nuova-aggiungi">+ Aggiungi</button>
+          <button class="btn sec" id="um-nuova-annulla">Annulla</button>
+        </div>
+        <div id="anag-um-errore" class="f-errore" hidden></div>
+        <div class="scroll-list anag-fam" id="tabella-anag-um"><div class="loading">carico i dati…</div></div>
+        <div class="hint">Le unità di misura alimentano gli elenchi dell'app (produzione e futuro Magazzino). g, kg, ml e lt sono di sistema: alimentano le conversioni e non si toccano. Rinominare una u.m. libera aggiorna i prodotti che la usano; i lotti già prodotti restano con l'u.m. storica del verbale. Eliminare è possibile solo se nessun prodotto la usa.</div>
+      </div>
+
       <div class="card" id="dettaglio-anagrafica" hidden>
         <h2>Scheda anagrafica <button class="chiudi" id="chiudi-dettaglio-anag">✕</button></h2>
         <div id="dettaglio-anagrafica-testo"><div class="loading">carico i dati…</div></div>
@@ -175,6 +188,76 @@
       <div class="card" id="dettaglio-arrivo" hidden>
         <h2>Dettaglio lotto in ingresso <button class="chiudi" id="chiudi-dettaglio">✕</button></h2>
         <div id="dettaglio-arrivo-testo"><div class="loading">carico i dati…</div></div>
+      </div>
+    </section>
+
+    <!-- ======================= SCADENZE ======================= -->
+    <section id="sez-scadenze" hidden>
+      <h1>Scadenze</h1>
+      <p class="sub">Tutti i lotti ordinati per urgenza, ingredienti e prodotti
+      separati. La finestra di default è 7 giorni; i lotti scaduti ma
+      ancora in casa si vedono solo col filtro "Scaduti": vanno buttati,
+      non nascosti. Clic su una riga per aprire il dettaglio del lotto.</p>
+
+      <div class="toolbar filtri">
+        <select id="scad-finestra">
+          <option value="3">Entro 3 giorni</option>
+          <option value="7" selected>Entro 7 giorni</option>
+          <option value="30">Entro 30 giorni</option>
+          <option value="all">Tutte le scadenze</option>
+          <option value="scad">Scaduti</option>
+        </select>
+        <span id="contatore-scad" class="muted"></span>
+      </div>
+
+      <div class="card card-larga">
+        <h2>🛒 Ingredienti in scadenza</h2>
+        <input id="cerca-scad-ing" type="search"
+               placeholder="Cerca ingrediente, marca, lotto, fornitore…">
+        <div id="tabella-scad-ing"><div class="loading">carico i dati…</div></div>
+      </div>
+
+      <div class="card card-larga">
+        <h2>🥣 Prodotti in scadenza</h2>
+        <input id="cerca-scad-pro" type="search"
+               placeholder="Cerca prodotto o lotto interno…">
+        <div id="tabella-scad-pro"><div class="loading">carico i dati…</div></div>
+      </div>
+    </section>
+
+    <!-- ======================= MAGAZZINO ======================= -->
+    <section id="sez-magazzino" hidden>
+      <h1>Magazzino</h1>
+      <p class="sub">Giacenze calcolate dagli arrivi meno i consumi: niente si scrive a mano.
+      La copertura dice quanti giorni l'ingrediente dura ancora al ritmo attuale;
+      sotto i 7 giorni finisce in "Da ordinare" (rosso sotto i 3).</p>
+
+      <div class="toolbar">
+        <div class="chip-filtri" id="mag-chips"></div>
+      </div>
+
+      <div class="card card-larga">
+        <h2>🛒 Da ordinare</h2>
+        <div id="mag-da-ordinare"><div class="loading">carico i dati…</div></div>
+      </div>
+
+      <div class="card card-larga">
+        <h2>📦 Giacenze e rifornimenti</h2>
+        <div id="tabella-magazzino"><div class="loading">carico i dati…</div></div>
+      </div>
+
+      <div class="card card-larga">
+        <h2>🗃 Esauriti</h2>
+        <div id="mag-esauriti"><div class="loading">carico i dati…</div></div>
+        <div class="hint">I lotti chiusi, senza giacenza: finiti nelle produzioni o
+        azzerati a mano per consumi fuori produzione (il classico: il latte del bar).
+        Restano qui per la tracciabilità: clicca una riga per la scheda del lotto
+        (se l'azzeramento era uno sbaglio, lì trovi "↩ Ripristina residua").</div>
+      </div>
+
+      <div class="card" id="dettaglio-magazzino" hidden>
+        <h2><span id="titolo-dettaglio-mag">Lotti in giacenza</span> <button class="chiudi" id="chiudi-dettaglio-mag">✕</button></h2>
+        <div id="dettaglio-magazzino-testo"><div class="loading">carico i dati…</div></div>
       </div>
     </section>
 
@@ -275,7 +358,11 @@
         </div>
         <div class="f-campo">
           <label for="qc-um">Unità di misura *</label>
-          <input id="qc-um" type="text" placeholder="es. kg">
+          <div class="combo">
+            <input id="qc-um" type="text" placeholder="es. kg" autocomplete="off">
+            <input type="hidden" id="qc-um-id">
+            <div class="combo-dd" id="dd-qcum" hidden></div>
+          </div>
         </div>
         <div class="f-campo">
           <label for="qc-sigla">Sigla (facoltativa)</label>
@@ -367,7 +454,7 @@
 
 <!-- ================= NUOVA PRODUZIONE (modal, flusso guidato) ================= -->
 <div class="overlay" id="overlay-produzione" hidden>
-  <div class="modal largo">
+  <div class="modal xl">
     <h2>Nuova produzione</h2>
     <p class="sub">La ricetta propone i lotti da consumare (FEFO): tu al massimo correggi.</p>
 
@@ -377,7 +464,7 @@
       <span class="step">3. Conferma</span>
     </div>
 
-    <div class="f-row">
+    <div class="f-row np-testata">
       <div class="f-campo">
         <label for="np-prodotto">Prodotto da produrre <span class="req">*</span></label>
         <div class="combo">
@@ -412,7 +499,13 @@
       </div>
       <div class="f-campo">
         <label for="np-qta">Quantità prodotta <span id="np-um" class="um"></span></label>
-        <input id="np-qta" type="number" step="0.001" min="0">
+        <div class="con-um combo">
+          <input id="np-qta" type="number" step="0.001" min="0">
+          <input id="np-qta-um" type="text" placeholder="u.m." autocomplete="off" hidden
+                 title="Cambia u.m.: stesso tipo (g↔kg, ml↔lt) il numero si riconverte da solo e si salva in canonica; tipo diverso (pz, teglie, porzioni) nessun calcolo, il lotto registra l'u.m. scelta">
+          <input type="hidden" id="np-qta-um-id">
+          <div class="combo-dd" id="dd-npum" hidden></div>
+        </div>
       </div>
     </div>
 
@@ -497,6 +590,9 @@
     <div class="f-campo">
       <label>Ingredienti <span class="req">*</span></label>
       <div id="nr-righe"><div class="loading">aggiungi la prima riga…</div></div>
+      <!-- STACCATO dalla tab delle righe e sempre visibile: anche
+           eliminando tutte le righe il ➕ non sparisce mai -->
+      <button class="btn sec" id="nr-aggiungi">+ Aggiungi ingrediente</button>
     </div>
 
     <div id="nr-errore" class="f-errore" hidden></div>

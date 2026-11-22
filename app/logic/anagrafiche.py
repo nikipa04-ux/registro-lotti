@@ -12,6 +12,9 @@ Regole di design (fisse):
 
 CONSERVAZIONI = ("Frigo", "Freezer", "Magazzino")
 
+from . import um   # le 4 u.m. di sistema = le chiavi di conversione di um.py
+UM_DI_SISTEMA = set(um.MASSA) | set(um.VOLUME)   # {'g', 'kg', 'ml', 'lt'}
+
 # I 14 allergeni obbligatori da etichetta (Reg. UE 1169/2011, Allegato II):
 # dati DI LEGGE, non demo. Ci sono sempre, in ogni database, anche in quelli
 # nati col vecchio seed a 4 allergeni: garantisci_allergeni_di_legge li
@@ -225,7 +228,8 @@ def dettaglio_prodotto(conn, prodotto_id):
         p["produzioni"] = [
             dict(r) for r in conn.execute(
                 "SELECT li.id, li.codice_lotto, li.data_produzione, "
-                "li.data_scadenza, li.qta_prodotta, p2.unita_misura AS um "
+                "li.data_scadenza, li.qta_prodotta, "
+                "COALESCE(li.um_prodotta, p2.unita_misura) AS um "
                 "FROM lotti_interni li JOIN prodotti p2 ON p2.id = li.prodotto_id "
                 "WHERE li.prodotto_id = ? ORDER BY li.data_produzione DESC, "
                 "li.id DESC LIMIT 20", (p["id"],)
@@ -456,3 +460,96 @@ def elimina_fornitore(conn, fornitore_id):
     if not f:
         raise ErroreAnagrafica("Fornitore inesistente")
     conn.execute("DELETE FROM fornitori WHERE id = ?", (fornitore_id,))
+
+
+# ---- Unità di misura (RIFIN 34) ----
+# La tabella alimenta gli elenchi di u.m. dell'app (produzione, e chi verrà
+# dopo). Le 4 DI SISTEMA (g, kg, ml, lt) non si toccano: le conversioni di
+# um.py le usano come chiavi. Le altre nascono dall'utente o dal seed
+# automatico di db.inizializza (le u.m. già usate dai prodotti).
+
+def lista_unita(conn):
+    """Le u.m. dell'anagrafica, con quante ne usano i prodotti e il flag
+    'sistema' (g/kg/ml/lt: protette, alimentano le conversioni)."""
+    righe = [dict(r) for r in conn.execute(
+        "SELECT u.id, u.nome, "
+        "(SELECT COUNT(*) FROM prodotti p WHERE p.unita_misura = u.nome) "
+        "AS n_prodotti FROM unita_misura u ORDER BY u.nome"
+    ).fetchall()]
+    for r in righe:
+        r["sistema"] = r["nome"] in UM_DI_SISTEMA
+    return righe
+
+
+def crea_unita(conn, nome):
+    nome = (nome or "").strip()
+    if not nome:
+        raise ErroreAnagrafica("Il nome dell'unità di misura è obbligatorio")
+    if nome in UM_DI_SISTEMA:
+        raise ErroreAnagrafica(f'"{nome}" esiste già: è un\'unità di sistema')
+    dup = conn.execute(
+        "SELECT id FROM unita_misura WHERE LOWER(nome) = LOWER(?)", (nome,)
+    ).fetchone()
+    if dup:
+        raise ErroreAnagrafica("Esiste già un'unità di misura con questo nome")
+    cur = conn.execute("INSERT INTO unita_misura (nome) VALUES (?)", (nome,))
+    return {"id": cur.lastrowid, "nome": nome}
+
+
+def rinomina_unita(conn, unita_id, nome):
+    """Rinomina una u.m. LIBERA e la propaga ai prodotti che la usano.
+
+    Le 4 di sistema si rifiutano (romperebbero le conversioni). I lotti
+    prodotti NON si toccano: um_prodotta è lo snapshot storico del
+    verbale, il lotto dice com'era quel giorno.
+    """
+    u = conn.execute(
+        "SELECT * FROM unita_misura WHERE id = ?", (unita_id,)
+    ).fetchone()
+    if not u:
+        raise ErroreAnagrafica("Unità di misura inesistente")
+    nome = (nome or "").strip()
+    if not nome:
+        raise ErroreAnagrafica("Il nome dell'unità di misura è obbligatorio")
+    if u["nome"] in UM_DI_SISTEMA:
+        raise ErroreAnagrafica(
+            f'"{u["nome"]}" è un\'unità di sistema: alimenta le conversioni, '
+            "non si rinomina"
+        )
+    dup = conn.execute(
+        "SELECT id FROM unita_misura WHERE LOWER(nome) = LOWER(?) AND id != ?",
+        (nome, unita_id),
+    ).fetchone()
+    if dup:
+        raise ErroreAnagrafica("Esiste già un'unità di misura con questo nome")
+    vecchio = u["nome"]
+    conn.execute("UPDATE unita_misura SET nome = ? WHERE id = ?",
+                 (nome, unita_id))
+    n = conn.execute(
+        "UPDATE prodotti SET unita_misura = ? WHERE unita_misura = ?",
+        (nome, vecchio),
+    ).rowcount
+    return {"id": unita_id, "nome": nome, "n_prodotti_aggiornati": n}
+
+
+def elimina_unita(conn, unita_id):
+    """Eliminazione PROTETTA: le 4 di sistema mai, le altre solo se nessun
+    prodotto le usa (i lotti prodotti restano con lo snapshot storico)."""
+    u = conn.execute(
+        "SELECT * FROM unita_misura WHERE id = ?", (unita_id,)
+    ).fetchone()
+    if not u:
+        raise ErroreAnagrafica("Unità di misura inesistente")
+    if u["nome"] in UM_DI_SISTEMA:
+        raise ErroreAnagrafica(
+            f'"{u["nome"]}" è un\'unità di sistema: non si elimina'
+        )
+    usata = conn.execute(
+        "SELECT COUNT(*) AS n FROM prodotti WHERE unita_misura = ?",
+        (u["nome"],),
+    ).fetchone()["n"]
+    if usata:
+        raise ErroreAnagrafica(
+            f"In uso da {usata} prodotti: eliminazione bloccata"
+        )
+    conn.execute("DELETE FROM unita_misura WHERE id = ?", (unita_id,))

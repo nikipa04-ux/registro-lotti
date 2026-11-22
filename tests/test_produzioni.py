@@ -293,3 +293,103 @@ def test_elimina_produzione_protetta_se_usata_da_altra_produzione(conn):
     assert residui == {"UOV-A": 10.0}
     n = conn.execute("SELECT COUNT(*) FROM lotti_interni").fetchone()[0]
     assert n == 1  # solo la crema
+
+
+# ---- ricetta modificata: snapshot al momento del verbale ----
+
+def test_produzione_che_segue_la_ricetta_non_e_marcata(conn):
+    lotto = registra_produzione(conn, produzione_crema())
+    assert lotto["ricetta_modificata"] == 0
+
+
+def test_ingrediente_aggiunto_fuori_ricetta_marca_il_lotto(conn):
+    lotto = registra_produzione(conn, produzione_crema(
+        consumi=[
+            {"origine": "ingresso", "lotto_origine_id": 100, "quantita_usata": 1.5},
+            {"origine": "ingresso", "lotto_origine_id": 101, "quantita_usata": 0.5},
+            # "UOV-A": le uova NON sono negli ingredienti della crema
+            {"origine": "ingresso", "lotto_origine_id": 102, "quantita_usata": 1},
+        ],
+    ))
+    assert lotto["ricetta_modificata"] == 1
+
+
+def test_riga_di_ricetta_esclusa_marca_il_lotto(conn):
+    # il bignè (ricetta: crema + uova) prodotto consumando SOLO la crema
+    crema = registra_produzione(conn, produzione_crema())
+    bigne = registra_produzione(conn, {
+        "prodotto_id": 4,
+        "data_produzione": OGGI,
+        "data_scadenza": "2026-11-24",
+        "qta_prodotta": 40,
+        "consumi": [
+            {"origine": "interno", "lotto_origine_id": crema["id"], "quantita_usata": 1},
+        ],
+    })
+    assert bigne["ricetta_modificata"] == 1
+
+
+def test_migrazione_colonna_idempotente_sui_db_nati_prima():
+    c = db.connessione(":memory:")
+    c.execute("CREATE TABLE prova (id INTEGER)")
+    db.garantisci_colonna(c, "prova", "extra", "INTEGER NOT NULL DEFAULT 0")
+    db.garantisci_colonna(c, "prova", "extra", "INTEGER NOT NULL DEFAULT 0")
+    c.execute("INSERT INTO prova (id, extra) VALUES (1, 1)")
+    assert c.execute("SELECT extra FROM prova").fetchone()["extra"] == 1
+    c.close()
+
+
+# ---- u.m. della quantità prodotta: SNAPSHOT um_prodotta ----
+
+def test_um_prodotta_diversa_da_canonica_si_salva(conn):
+    # il bignè è in pz, ma oggi si fanno 6 teglie: tipi diversi non si
+    # convertono, il lotto registra la verità dell'operatore
+    crema = registra_produzione(conn, produzione_crema())
+    bigne = registra_produzione(conn, {
+        "prodotto_id": 4,
+        "data_produzione": OGGI,
+        "data_scadenza": "2026-11-24",
+        "qta_prodotta": 6,
+        "um_prodotta": "teglie",
+        "consumi": [
+            {"origine": "interno", "lotto_origine_id": crema["id"], "quantita_usata": 1},
+        ],
+    })
+    assert bigne["um_prodotta"] == "teglie"
+
+
+def test_um_prodotta_convertibile_e_rifiutata(conn):
+    # 'g' per un prodotto in kg: stesso tipo, quindi la conversione spetta
+    # a CHI CHIAMA (la UI lo fa): l'API non converte di nascosto
+    with pytest.raises(ErroreProduzione, match="CONVERTITA"):
+        registra_produzione(conn, produzione_crema(
+            qta_prodotta=2000, um_prodotta="g",
+        ))
+
+
+def test_um_prodotta_come_la_canonica_resta_null(conn):
+    lotto = registra_produzione(conn, produzione_crema(um_prodotta="kg"))
+    assert lotto["um_prodotta"] is None   # nessuna snapshot inutile
+
+
+def test_um_prodotta_vuota_resta_null(conn):
+    lotto = registra_produzione(conn, produzione_crema(um_prodotta="  "))
+    assert lotto["um_prodotta"] is None
+
+
+def test_lotto_in_um_diversa_non_e_proposto_dalla_fefo(conn):
+    # la crema è in kg, ma oggi se ne fanno 4 vassoi (u.m. non convertibile):
+    # il lotto resta valido per tracciabilità, la FEFO però NON lo propone
+    # come giacenza per chi la consuma (4 vassoi non sono 4 kg)
+    vassoi = registra_produzione(conn, produzione_crema(
+        qta_prodotta=4, um_prodotta="vassoi",
+        consumi=[{"origine": "ingresso", "lotto_origine_id": 101, "quantita_usata": 1.5}],
+    ))
+    assert lotti_disponibili(conn, 3, oggi=OGGI) == []
+    # il lotto canonico invece sì: la FEFO non cambia per lui
+    lotto = registra_produzione(conn, produzione_crema(
+        consumi=[{"origine": "ingresso", "lotto_origine_id": 101, "quantita_usata": 1.5}],
+    ))
+    lotti = lotti_disponibili(conn, 3, oggi=OGGI)
+    assert [l["id"] for l in lotti] == [lotto["id"]]
+    assert vassoi["um_prodotta"] == "vassoi"
