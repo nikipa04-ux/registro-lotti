@@ -82,6 +82,7 @@
         <input id="cerca-ricette" type="search" placeholder="Cerca prodotto…">
         <span id="contatore-ricette" class="muted"></span>
         <button class="btn" id="btn-nuova-ricetta">+ Nuova ricetta</button>
+        <button class="btn sec" id="btn-libro-ricette" title="Tutte le ricette con ingredienti e allergeni, da stampare">🖨 PDF libro ricette</button>
       </div>
 
       <div class="card">
@@ -244,6 +245,20 @@
         <h2>📦 Giacenze e rifornimenti</h2>
         <div id="tabella-magazzino"><div class="loading">carico i dati…</div></div>
       </div>
+
+      <div class="card card-larga">
+        <h2>🗃 Esauriti</h2>
+        <div id="mag-esauriti"><div class="loading">carico i dati…</div></div>
+        <div class="hint">I lotti chiusi, senza giacenza: finiti nelle produzioni o
+        azzerati a mano per consumi fuori produzione (il classico: il latte del bar).
+        Restano qui per la tracciabilità: clicca una riga per la scheda del lotto
+        (se l'azzeramento era uno sbaglio, lì trovi "↩ Ripristina residua").</div>
+      </div>
+
+      <div class="card" id="dettaglio-magazzino" hidden>
+        <h2><span id="titolo-dettaglio-mag">Lotti in giacenza</span> <button class="chiudi" id="chiudi-dettaglio-mag">✕</button></h2>
+        <div id="dettaglio-magazzino-testo"><div class="loading">carico i dati…</div></div>
+      </div>
     </section>
 
     <!-- ======================== PRODUTTORE ======================== -->
@@ -343,7 +358,11 @@
         </div>
         <div class="f-campo">
           <label for="qc-um">Unità di misura *</label>
-          <input id="qc-um" type="text" placeholder="es. kg">
+          <div class="combo">
+            <input id="qc-um" type="text" placeholder="es. kg" autocomplete="off">
+            <input type="hidden" id="qc-um-id">
+            <div class="combo-dd" id="dd-qcum" hidden></div>
+          </div>
         </div>
         <div class="f-campo">
           <label for="qc-sigla">Sigla (facoltativa)</label>
@@ -480,9 +499,12 @@
       </div>
       <div class="f-campo">
         <label for="np-qta">Quantità prodotta <span id="np-um" class="um"></span></label>
-        <div class="con-um">
+        <div class="con-um combo">
           <input id="np-qta" type="number" step="0.001" min="0">
-          <select id="np-qta-um" hidden title="Cambia u.m.: stesso tipo (g↔kg, ml↔lt) il numero si riconverte da solo e si salva in canonica; tipo diverso (pz, teglie, porzioni) nessun calcolo, il lotto registra l'u.m. scelta"></select>
+          <input id="np-qta-um" type="text" placeholder="u.m." autocomplete="off" hidden
+                 title="Cambia u.m.: stesso tipo (g↔kg, ml↔lt) il numero si riconverte da solo e si salva in canonica; tipo diverso (pz, teglie, porzioni) nessun calcolo, il lotto registra l'u.m. scelta">
+          <input type="hidden" id="np-qta-um-id">
+          <div class="combo-dd" id="dd-npum" hidden></div>
         </div>
       </div>
     </div>

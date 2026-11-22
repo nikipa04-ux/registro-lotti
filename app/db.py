@@ -45,6 +45,8 @@ def inizializza(db_path=None):
     garantisci_colonna(conn, "lotti_interni", "ricetta_modificata",
                        "INTEGER NOT NULL DEFAULT 0")
     garantisci_colonna(conn, "lotti_interni", "um_prodotta", "TEXT")
+    garantisci_colonna(conn, "lotti_ingresso", "data_esaurimento", "TEXT")
+    garantisci_colonna(conn, "lotti_ingresso", "residua_pre_azzeramento", "REAL")
     popola_unita_misura(conn)
     conn.commit()
     return conn

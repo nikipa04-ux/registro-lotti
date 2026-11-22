@@ -33,7 +33,9 @@ in locale e apre la finestra) e il bat che prepara il pacchetto.
 - Per portare i dati della fase 1: copia il `registro-lotti.db` del
   progetto dentro `RegistroLotti\data\`.
 - Aggiornare l'app su un PC: ricopia la cartella `app\` nel pacchetto
-  (la riesegui del bat rifà tutto il pacchetto fresco).
+  (la riesegui del bat rifà tutto il pacchetto, ma conserva i dati:
+  `RegistroLotti\data\` viene messa da parte e rimessa a posto).
+  Se la build si interrompe, riprendi la cartella `_data_backup\` a mano.
 
 Requisito sul PC di destinazione: Windows 10/11 con Edge (per WebView2,
 già presente di norma). Serve solo quello: né Python, né internet.

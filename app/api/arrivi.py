@@ -130,3 +130,35 @@ def elimina(arrivo_id: int):
         except ErroreArrivo as e:
             raise HTTPException(422, str(e))
         conn.commit()
+
+
+@router.post("/{arrivo_id}/azzera", status_code=204)
+def azzera(arrivo_id: int):
+    """Azzeramento manuale della residua (RIFIN 38): consumo NON di
+    produzione (es. il latte finito al bar). Il lotto resta per la
+    tracciabilità, con la data di chiusura. Recapita in "Esauriti".
+    """
+    from ..logic.arrivi import azzera_lotto
+
+    with connessione() as conn:
+        try:
+            azzera_lotto(conn, arrivo_id)
+        except ErroreArrivo as e:
+            raise HTTPException(422, str(e))
+        conn.commit()
+
+
+@router.post("/{arrivo_id}/ripristina", status_code=204)
+def ripristina(arrivo_id: int):
+    """Ripristino di un lotto azzerato a mano (RIFIN 39): l'azzeramento
+    era uno sbaglio. La residua torna com'era prima, il lotto esce da
+    "Esauriti" e rientra in giacenza.
+    """
+    from ..logic.arrivi import ripristina_lotto
+
+    with connessione() as conn:
+        try:
+            ripristina_lotto(conn, arrivo_id)
+        except ErroreArrivo as e:
+            raise HTTPException(422, str(e))
+        conn.commit()

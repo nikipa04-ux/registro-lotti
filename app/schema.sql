@@ -76,6 +76,10 @@ CREATE TABLE IF NOT EXISTS lotti_ingresso (
     data_scadenza TEXT NOT NULL,
     quantita REAL,
     quantita_residua REAL,          -- giacenza del lotto, scaricata dai consumi
+    data_esaurimento TEXT,           -- RIFIN 38: azzerato a mano (es. consumi esterni
+                                     -- come il bar): il lotto resta per la tracciabilità
+    residua_pre_azzeramento REAL,    -- RIFIN 39: foto della residua al momento
+                                     -- dell'azzeramento: serve al ripristino
     prezzo_unitario REAL,           -- costo d'acquisto per u.m. (lo storico prezzi nasce qui)
     iva REAL,                       -- aliquota %: i totali sono CALCOLATI, non memorizzati
     UNIQUE (prodotto_id, codice_lotto, fornitore_id)

@@ -102,8 +102,45 @@ def lista_scadenze(conn, finestra="7", oggi=None):
     return righe
 
 
+def lotti_giacenza(conn, prodotto_id, oggi=None):
+    """Lotti di un ingrediente ancora IN GIACENZA (residua > 0), in ordine
+    FEFO: lo stesso ordine con cui la proposta di produzione li consuma.
+    Serve al pannello laterale del Magazzino: click su una giacenza → i
+    lotti che la compongono (la UI li raggruppa per marca).
+    """
+    if not conn.execute(
+        "SELECT 1 FROM prodotti WHERE id = ?", (prodotto_id,)
+    ).fetchone():
+        raise ErroreMagazzino("Prodotto inesistente.")
+    if oggi is None:
+        oggi = date.today()
+    if isinstance(oggi, str):
+        oggi = date.fromisoformat(oggi)
+
+    righe = [dict(r) for r in conn.execute(
+        "SELECT li.id, li.codice_lotto, "
+        "COALESCE(li.marca, p.marca, '—') AS marca, f.nome AS fornitore, "
+        "li.quantita, li.quantita_residua, li.data_arrivo, li.data_scadenza, "
+        "li.prezzo_unitario, li.iva, p.unita_misura AS um "
+        "FROM lotti_ingresso li "
+        "JOIN prodotti p ON p.id = li.prodotto_id "
+        "JOIN fornitori f ON f.id = li.fornitore_id "
+        "WHERE li.prodotto_id = ? AND li.quantita_residua > 0 "
+        "ORDER BY li.data_scadenza, li.data_arrivo, li.id",
+        (prodotto_id,),
+    ).fetchall()]
+    for r in righe:
+        r["giorni"] = _giorni_alla(r["data_scadenza"], oggi)
+    return righe
+
+
 def magazzino(conn, oggi=None):
-    """Ritorna {"righe": [...], "stat": [...]} pronte per la UI.
+    """Ritorna {"righe": [...], "stat": [...], "esauriti": [...]} pronte per la UI.
+
+    esauriti (RIFIN 38): i lotti chiusi a zero, azzerati a mano (es. il
+    latte del bar) o consumati dalle produzioni: restano leggibili per
+    la tracciabilità. L'unica "scrittura" ammessa sul magazzino è per
+    l'appunto l'azzeramento manuale (data_esaurimento).
 
     oggi: date o ISO stringa, serve SOLO nei test per date deterministiche;
     a produzione si lascia None (oggi reale del server).
@@ -164,4 +201,26 @@ def magazzino(conn, oggi=None):
             "cadenza": cadenza, "prossimo_atteso": prossimo_atteso,
         })
 
-    return {"righe": righe, "stat": stat}
+    # ESAURITI (RIFIN 38): lotti chiusi a zero, per la tracciabilità. Due
+    # vite possibili: consumati dalle produzioni (esaurito_il = data del
+    # VERBALE più recente che li ha scaricati) o azzerati a mano (es. il
+    # latte del bar: data_esaurimento). Ordinati dal più recente.
+    esauriti = [dict(r) for r in conn.execute(
+        "SELECT p.id AS prodotto_id, p.nome AS prodotto, p.conservazione, "
+        "COALESCE(li.marca, p.marca, '—') AS marca, f.nome AS fornitore, "
+        "li.id, li.codice_lotto, li.quantita, li.data_arrivo, li.data_scadenza, "
+        "COALESCE(li.data_esaurimento, "
+        "  (SELECT MAX(li2.data_produzione) FROM consumi c "
+        "   JOIN lotti_interni li2 ON li2.id = c.lotto_interno_id "
+        "   WHERE c.origine = 'ingresso' AND c.lotto_origine_id = li.id) "
+        ") AS esaurito_il, "
+        "CASE WHEN li.data_esaurimento IS NOT NULL "
+        "     THEN 'azzerato' ELSE 'consumato' END AS come "
+        "FROM lotti_ingresso li "
+        "JOIN prodotti p ON p.id = li.prodotto_id "
+        "JOIN fornitori f ON f.id = li.fornitore_id "
+        "WHERE li.quantita_residua <= 0 "
+        "ORDER BY esaurito_il DESC, li.data_arrivo DESC",
+    ).fetchall()]
+
+    return {"righe": righe, "stat": stat, "esauriti": esauriti}

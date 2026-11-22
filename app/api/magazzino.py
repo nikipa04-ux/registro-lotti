@@ -8,7 +8,9 @@ valida l'input e si delega.
 from fastapi import APIRouter, HTTPException
 
 from ..db import connessione
-from ..logic.magazzino import FINESTRE, lista_scadenze, magazzino
+from ..logic.magazzino import (
+    FINESTRE, ErroreMagazzino, lista_scadenze, lotti_giacenza, magazzino,
+)
 
 router = APIRouter(prefix="/api/magazzino", tags=["magazzino"])
 
@@ -37,3 +39,17 @@ def scadenze(finestra: str = "7"):
             422, "Finestra non valida: scegli 3, 7, 30, all o scad")
     with connessione() as conn:
         return lista_scadenze(conn, finestra)
+
+
+@router.get("/lotti/{prodotto_id}")
+def lotti(prodotto_id: int):
+    """Lotti in giacenza di un ingrediente, in ordine FEFO.
+
+    Il pannello laterale del Magazzino (click su una riga) li mostra
+    raggruppati per marca: niente si scrive, si legge dal vivo.
+    """
+    with connessione() as conn:
+        try:
+            return lotti_giacenza(conn, prodotto_id)
+        except ErroreMagazzino as e:
+            raise HTTPException(404, str(e))

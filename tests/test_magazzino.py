@@ -6,7 +6,10 @@ dipendono dal giorno in cui girano i test.
 import pytest
 
 from app import db
-from app.logic.magazzino import SOGLIA_AMBRA, SOGLIA_ROSSO, magazzino
+from app.logic.arrivi import azzera_lotto, ripristina_lotto
+from app.logic.magazzino import (
+    SOGLIA_AMBRA, SOGLIA_ROSSO, ErroreMagazzino, lotti_giacenza, magazzino,
+)
 
 OGGI = "2026-11-18"
 
@@ -232,3 +235,90 @@ def test_il_consumo_conta_anche_i_lotti_esauriti(conn):
     dati = magazzino(conn, oggi=OGGI)
     s = stat_di(dati, "Latte intero")
     assert s["consumo_medio"] == pytest.approx(10 / 16)   # lotto 1 esausto consumato
+
+
+# ------- il PANNELLO LATERALE: i lotti di una giacenza (RIFIN 36) -------
+
+def test_lotti_solo_quelli_ancora_in_giacenza(conn):
+    # il lotto 1 del latte è ESAURITO: il pannello mostra solo chi ha residua
+    codici = [l["codice_lotto"] for l in lotti_giacenza(conn, 1, oggi=OGGI)]
+    assert codici == ["L2612B", "L2612C"]
+
+
+def test_lotti_in_ordine_fefo_chi_scade_prima_viene_primo(conn):
+    # sposto la scadenza del lotto 3 PRIMA di quella del lotto 2: FEFO lo promuove
+    conn.execute("UPDATE lotti_ingresso SET data_scadenza='2026-11-20' WHERE id=3")
+    conn.commit()
+    codici = [l["codice_lotto"] for l in lotti_giacenza(conn, 1, oggi=OGGI)]
+    assert codici == ["L2612C", "L2612B"]
+
+
+def test_lotti_marca_fallback_anagrafica_e_fornitore(conn):
+    # farina: il lotto NON ha marca → vince quella abituale dell'anagrafica
+    lotti = lotti_giacenza(conn, 2, oggi=OGGI)
+    assert len(lotti) == 1
+    assert lotti[0]["marca"] == "Molino"
+    assert lotti[0]["fornitore"] == "Caseificio Valle"
+    assert lotti[0]["um"] == "kg"
+
+
+def test_lotti_i_giorni_alla_scadenza_per_il_badge(conn):
+    # uova: scade il 2026-12-05, oggi fisso 2026-11-18 → 17 giorni
+    lotti = lotti_giacenza(conn, 4, oggi=OGGI)
+    assert lotti[0]["giorni"] == 17
+
+
+def test_lotti_prodotto_inesistente_respinge(conn):
+    with pytest.raises(ErroreMagazzino):
+        lotti_giacenza(conn, 999)
+
+
+def test_lotti_riportano_arrivo_prezzo_e_iva(conn):
+    # la riga del pannello porta anche ARRIVO (quando è entrato in casa)
+    # e i costi d'acquisto del lotto
+    conn.execute("UPDATE lotti_ingresso SET prezzo_unitario=1.25, iva=4 WHERE id=2")
+    conn.commit()
+    l = next(x for x in lotti_giacenza(conn, 1, oggi=OGGI)
+             if x["codice_lotto"] == "L2612B")
+    assert l["data_arrivo"] == "2026-11-12"
+    assert l["prezzo_unitario"] == pytest.approx(1.25)
+    assert l["iva"] == 4
+
+
+# ------- gli ESAURITI (RIFIN 38): lotti chiusi a zero, lettura tracciabilità -------
+
+def test_esauriti_consumati_prendono_la_data_del_verbale(conn):
+    # latte L2607A e zucchero Z2601: chiusi DALLE PRODUZIONI (residua 0)
+    dati = magazzino(conn, oggi=OGGI)
+    esa = {(r["codice_lotto"], r["come"], r["esaurito_il"])
+           for r in dati["esauriti"]}
+    assert ("L2607A", "consumato", "2026-11-16") in esa
+    assert ("Z2601", "consumato", "2026-11-16") in esa
+    # chi è ANCORA in giacenza non finisce tra gli esauriti
+    assert all(r["codice_lotto"] != "L2612B" for r in dati["esauriti"])
+
+
+def test_esauriti_azzerati_a_mano_marcati_con_la_data(conn):
+    # panna P2601: 2 lt residui azzerati a mano (consumo NON di produzione)
+    azzera_lotto(conn, 5, oggi=OGGI)
+    dati = magazzino(conn, oggi=OGGI)
+    riga = next(r for r in dati["esauriti"] if r["codice_lotto"] == "P2601")
+    assert riga["come"] == "azzerato"
+    assert riga["esaurito_il"] == OGGI
+    # e sparita dalle GIACENZE, anche se il consumo medio resta lo storico
+    assert not [r for r in dati["righe"] if r["nome"] == "Panna"]
+    s = stat_di(dati, "Panna")
+    assert s["giacenza_tot"] == 0
+
+
+def test_esauriti_escono_dopo_il_ripristino_e_tornano_in_giacenza(conn):
+    # RIFIN 39: azzerata per sbaglio la panna P2601, si ripristina
+    azzera_lotto(conn, 5, oggi=OGGI)
+    ripristina_lotto(conn, 5)
+    dati = magazzino(conn, oggi=OGGI)
+    # fuori da Esauriti...
+    assert not [r for r in dati["esauriti"] if r["codice_lotto"] == "P2601"]
+    # ...e di nuovo nelle GIACENZE con la residua di prima
+    assert any(r["nome"] == "Panna" for r in dati["righe"])
+    s = stat_di(dati, "Panna")
+    assert s["giacenza_tot"] == 2

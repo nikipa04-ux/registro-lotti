@@ -195,6 +195,30 @@ registrazioni vere (`app/logic/magazzino.py`).
 - **Chip di filtro** per conservazione (con conteggio dei lotti,
   anche "Da sistemare" per chi non ce l'ha): valgono per ENTRAMBE
   le card
+- **Clic su una riga → pannello "Lotti in giacenza"**: si apre in
+  LATERALE (come la scheda anagrafica) sui monitor larghi, sotto le
+  card altrimenti, e mostra i lotti che compongono quella giacenza:
+  raggruppati per marca (quella cliccata in cima), in ordine FEFO,
+  con fornitore, data di ARRIVO, residuo su arrivato, badge scadenza
+  e costo d'acquisto (€/u.m. + IVA). Sulla riga figlia il clic porta
+  la sua marca in cima al pannello. Un secondo clic, sul SINGOLO
+  lotto, apre la scheda completa di tracciabilità (stessa del
+  dettaglio di Arrivi: costi totali e "Usato in" produzioni), col
+  tasto ◀ per tornare alla lista
+- **🗃 Esauriti**: i lotti CHIUSI, senza giacenza, che restano leggibili
+  per la tracciabilità. Due vite, marcate in colonna "Come": ⚙
+  **produzioni** (la residua è finita nei verbali: "esaurito il" = data
+  del verbale più recente) o **0 azzerato** (chiuso a mano). L'unico
+  caso in cui nel magazzino si SCRIVE: il bottone **"0 Azzera residua"**
+  nella scheda del lotto (pannello del Magazzino) porta la residua a 0
+  senza cancellare nulla: è per i consumi fuori produzione, il caso
+  classico è il latte usato anche al bar per i cappuccini. Un lotto
+  azzerato esce dalle giacenze e dalle scadenze, ma resta qui con la
+  sua data di chiusura. L'azzeramento nasce con una FOTO della residua
+  com'era prima: se era uno sbaglio, il bottone **"↩ Ripristina residua"**
+  nella scheda del lotto riporta tutto come prima (il lotto esce da
+  "Esauriti" e rientra in giacenza); per i lotti azzerati prima di
+  questa versione la residua torna alla quantità originale d'arrivo
 - Senza consumi non c'è copertura (non si sa quanto duri): resta
   "—" e non finisce in Da ordinare
 
@@ -252,12 +276,15 @@ della ricetta, l'operatore al massimo corregge.
      marca e prezzi si completano in Arrivi), entra nella riga e la FEFO
      copre il resto: la tracciabilità resta intatta, il verbale scarica
      un lotto che esiste davvero
-  3. date e quantità prodotta (default = resa della ricetta; l'elenco
-     offre TUTTE le u.m. dell'app: stesso tipo g↔kg, ml↔lt si riconverte
-     da solo e si salva in u.m. canonica; tipo diverso, es. 6 teglie di
-     un prodotto in pz, nessun calcolo automatico e il lotto registra la
-     quantità nell'u.m. scelta, che resta visibile in dettaglio, scheda
-     prodotto ed etichetta PDF) → salva
+  3. date e quantità prodotta (default = resa della ricetta; il numero è
+     compatto e accanto c'è la tendina **u.m. a cascata** con tutte le
+     u.m. dell'app, divise per tipo ⚖/🧪/🥣: stesso tipo g↔kg, ml↔lt si
+     riconverte da solo e si salva in u.m. canonica; tipo diverso, es. 6
+     teglie di un prodotto in pz, nessun calcolo automatico e il lotto
+     registra la quantità nell'u.m. scelta, che resta visibile in
+     dettaglio, scheda prodotto ed etichetta PDF. Il ➕ in fondo crea
+     al volo una u.m. nuova in Anagrafiche senza chiudere il form) →
+     salva
 
 Al salvataggio il server RIVALIDA tutto (`app/logic/produzioni.py`):
 giacenze sufficienti, consumi non vuoti (il verbale), niente lotto ripetuto,
@@ -310,6 +337,17 @@ la ricetta ora si crea e si corregge dall'interfaccia.
 - **Eliminazione PROTETTA**: rifiutata se il prodotto ha produzioni
   registrate (`DELETE /api/ricette/{prodotto_id}`); senza produzioni la
   ricetta si elimina e il prodotto perde la famiglia
+- **🖨 PDF libro ricette**: accanto a "Nuova ricetta", scarica il
+  manuale HACCP di carta di tutte le ricette (`GET /api/ricette/libro.pdf`,
+  solo libreria standard): per ogni prodotto (alfabetico) famiglia,
+  resa, ingredienti con quantità, "Contiene:" con gli ALLERGENI
+  CALCOLATI (l'ingrediente acquistato dichiara i suoi; il semilavorato
+  EREDITA in ricorsione dalla sua ricetta: la crema porta latte e uova
+  nel bignè); il PROCEDIMENTO resta nell'app, fuori dal PDF. In cima,
+  come nell'etichetta: il NOME DEL NEGOZIO in neretto (sezione
+  Produttore), indirizzo e P.IVA, e la data di stampa. Le pagine
+  arrivano da sole: la ricetta che non entra nel foglio rimanda intera
+  alla pagina dopo
 
 Regole nel server (`app/logic/ricette.py`): righe non vuote con quantità
 maggiori di zero, niente ingrediente ripetuto, ingrediente inesistente
@@ -348,11 +386,12 @@ ricetta (qui NON si tocca, al massimo la si apre).
     si propaga ai prodotti che la usano** (i lotti già prodotti restano
     con l'u.m. storica del verbale: lo snapshot non si riscrive),
     eliminazione solo se non usata. g, kg, ml e lt sono badge "⚙ di
-    sistema": alimentano le conversioni e non si toccano. Il selettore
-    della quantità prodotta pesa da qui, in unione con le u.m. ancora in
-    uso sui prodotti (nei form il campo u.m. resta testo libero: una u.m.
-    digitata funziona anche senza creare la voce). A ogni avvio il seed
-    ripopola la tabella con le u.m. di sistema + quelle già usate.
+    sistema": alimentano le conversioni e non si toccano. La tendina
+    della quantità prodotta (Produzioni) pesa da qui, in unione con le
+    u.m. ancora in uso sui prodotti (nei form il campo u.m. resta testo
+    libero: una u.m. digitata funziona anche senza creare la voce). A
+    ogni avvio il seed ripopola la tabella con le u.m. di sistema +
+    quelle già usate.
 - **Scheda di dettaglio** (clic su una riga): sui monitor larghi
   (≥ 1400px) si apre come **pannello laterale ancorato accanto alle
   card**, sul lato destro dello schermo, sempre visibile mentre si

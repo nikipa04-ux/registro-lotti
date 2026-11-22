@@ -387,6 +387,14 @@ creaCombo({
     $("qc-prod-nome").value = nome;
     // gli allergeni si scelgono subito: se serve, l'elenco si carica ora
     if (!ANAG_ALLERGENI.length) { try { await caricaAllergeni(); } catch (e) { /* chips vuote */ } }
+    // RIFIN 43: anche l'u.m. viene dall'anagrafica, con tendina ➕ come in
+    // Produzioni: se serve (anagrafiche mai aperte in sessione) la si carica
+    if (!UMS.length) {
+      try {
+        const r = await fetch("/api/anagrafiche/unita-misura");
+        if (r.ok) UMS = await r.json();
+      } catch (e) { /* tendina con le sole u.m. di sistema */ }
+    }
     QC_ALLERGENI = new Set();
     renderChipsAllergeni("qc-chips", QC_ALLERGENI, true);
     $("qc-cons").focus();
@@ -404,6 +412,38 @@ creaCombo({
     $("qc-forn-piva").value = "";
     $("qc-forn-piva").focus();
   },
+});
+
+/* RIFIN 43: l'u.m. del nuovo ingrediente prende la stessa tendina delle
+   Produzioni (pool completo: sistema + anagrafica + u.m. libere) con ➕
+   che crea l'u.m. in Anagrafiche senza lasciare il form Arrivi. */
+async function creaUmDaQc(nome) {
+  if (!nome) return mostraErroreForm("Inserisci un nome.");
+  try {
+    const r = await fetch("/api/anagrafiche/unita-misura", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome })
+    });
+    const corpo = await r.json().catch(() => ({}));
+    if (!r.ok) return mostraErroreForm(typeof corpo.detail === "string" ? corpo.detail : "Creazione rifiutata.");
+    UMS.push(corpo);
+    if (ANAG_UM !== UMS && !ANAG_UM.some(u => u.id === corpo.id)) ANAG_UM.push(corpo);
+    sezioniCaricate.anagrafiche = false;
+    $("qc-um").value = corpo.nome;
+    $("qc-um-id").value = String(corpo.id);
+  } catch (e) {
+    mostraErroreForm("Il server non risponde.");
+  }
+}
+
+creaCombo({
+  input: $("qc-um"), tendina: $("dd-qcum"), idNascosto: $("qc-um-id"),
+  pool: poolUmCombo,
+  gruppo: u => GRUPPO_UM[u.nome] === "massa" ? "⚖ Massa (g ↔ kg)" :
+              GRUPPO_UM[u.nome] === "volume" ? "🧪 Volume (ml ↔ lt)" :
+              "🥣 Laboratorio (non converte)",
+  onCrea: creaUmDaQc
 });
 
 /* -------- Creazione rapida ingrediente / fornitore -------- */
@@ -652,6 +692,7 @@ async function avviaMagazzino() {
 }
 
 async function caricaMagazzino() {
+  $("dettaglio-magazzino").hidden = true;   // dati nuovi: il pannello vecchio si chiude
   try {
     const r = await fetch("/api/magazzino");
     if (!r.ok) throw new Error();
@@ -668,6 +709,7 @@ function renderMagazzino(dati) {
   renderChipsMagazzino(dati);
   renderDaOrdinare(dati);
   renderGiacenze(dati);
+  renderEsauriti(dati);
 }
 
 function consOf(r) {
@@ -716,7 +758,7 @@ function renderDaOrdinare(dati) {
     "<th class='num'>Consumo med./g</th><th class='num'>Copertura</th>" +
     "<th>Ultimo arrivo</th><th>Prossimo atteso</th></tr>" +
     righe.map(s =>
-      "<tr><td><b>" + esc(s.nome) + "</b> " + consBadge(s.conservazione) + "</td>" +
+      "<tr data-lotti data-prod='" + s.prodotto_id + "'><td><b>" + esc(s.nome) + "</b> " + consBadge(s.conservazione) + "</td>" +
       "<td class='num'><b>" + fmt(s.giacenza_tot) + "</b>\u00A0" + esc(s.um || "") + "</td>" +
       "<td class='num'>" + (s.consumo_medio == null ? "—" :
         fmt(s.consumo_medio) + "\u00A0" + esc(s.um || "")) + "</td>" +
@@ -732,6 +774,34 @@ function badgeCopertura(s) {
   if (s.livello === "rosso") return '<span class="badge b-red">' + testo + "</span>";
   if (s.livello === "ambra") return '<span class="badge b-amber">' + testo + "</span>";
   return '<span class="badge b-green">' + testo + "</span>";
+}
+
+/* gli ESAURITI (RIFIN 38): lotti chiusi a zero, senza giacenza. Consumati
+   dalle produzioni o azzerati a mano (es. il latte del bar): il lotto NON
+   si cancella, si legge qui per la tracciabilità. */
+function renderEsauriti(dati) {
+  const righe = (dati.esauriti || []).filter(r => MAG_FILTRO === "" || consOf(r) === MAG_FILTRO);
+  if (!righe.length) {
+    $("mag-esauriti").innerHTML =
+      '<table><tr><td class="empty">Nessun lotto esaurito.</td></tr></table>';
+    return;
+  }
+  $("mag-esauriti").innerHTML =
+    "<table><tr><th>Prodotto</th><th>Marca</th><th>Lotto</th><th>Fornitore</th>" +
+    "<th class='num'>Arrivato</th><th>Esaurito il</th><th>Come</th></tr>" +
+    righe.map(r =>
+      "<tr data-lotti data-lotto='" + r.id + "'><td><b>" + esc(r.prodotto) + "</b> " +
+      consBadge(r.conservazione) + "</td>" +
+      "<td>" + marcaBadge(r.marca) + "</td>" +
+      "<td class='mono'>" + esc(r.codice_lotto) + "</td>" +
+      "<td>" + esc(r.fornitore) + "</td>" +
+      "<td class='num'>" + fmt(r.quantita) + "</td>" +
+      "<td>" + esc(r.esaurito_il || "—") + "</td>" +
+      "<td>" + (r.come === "azzerato"
+        ? '<span class="badge b-red" title="azzerato a mano: consumo fuori produzione">0 azzerato</span>'
+        : '<span class="badge b-gray" title="chiuso dai consumi delle produzioni">⚙ produzioni</span>') +
+      "</td></tr>"
+    ).join("") + "</table>";
 }
 
 function renderGiacenze(dati) {
@@ -759,8 +829,10 @@ function renderGiacenze(dati) {
 
 function rigaMagazzino(g) {
   const s = g.s, multi = g.marche.length > 1;
+  // click su una riga → pannello laterale "Lotti in giacenza";
+  // sulla figlia si porta anche la MARCA, che nel pannello va in cima
   const padri =
-    "<tr class='riga-mag-box'>" +
+    "<tr class='riga-mag-box' data-lotti data-prod='" + s.prodotto_id + "'>" +
     "<td><b>" + esc(s.nome) + "</b> " + consBadge(s.conservazione) + "</td>" +
     "<td>" + (multi ? '<span class="muted">' + g.marche.length + " marche</span>"
       : marcaBadge(g.marche[0].marca)) + "</td>" +
@@ -774,7 +846,8 @@ function rigaMagazzino(g) {
     "<td>" + esc(s.ultimo_arrivo) + "</td>" +
     "<td>" + esc(s.prossimo_atteso || "—") + "</td></tr>";
   const figlie = multi ? g.marche.map(m =>
-    "<tr class='riga-figlia'><td></td>" +
+    "<tr class='riga-figlia' data-lotti data-prod='" + s.prodotto_id +
+    "' data-marca='" + esc(m.marca) + "'><td></td>" +
     "<td class='td-marca'>└ " + marcaBadge(m.marca) + "</td>" +
     "<td class='num'>" + fmt(m.giacenza) + "\u00A0" + esc(s.um || "") + "</td>" +
     "<td colspan='5'></td></tr>"
@@ -786,6 +859,206 @@ function marcaBadge(marca) {
   return marca && marca !== "—"
     ? '<span class="badge b-gray">🏷 ' + esc(marca) + "</span>" : "—";
 }
+
+/* --- Pannello laterale "Lotti in giacenza" (RIFIN 36) --- */
+
+["tabella-magazzino", "mag-da-ordinare"].forEach(id =>
+  $(id).addEventListener("click", e => {
+    const tr = e.target.closest("tr[data-lotti]");
+    if (!tr || !MAG_DATI) return;
+    apriLottiMagazzino(Number(tr.dataset.prod), tr.dataset.marca || "");
+  }));
+
+async function apriLottiMagazzino(prodotto_id, marca) {
+  MAG_PANNELLO_LOTTI = { prodotto_id, marca };   // il ◀ della scheda torna qui
+  $("dettaglio-magazzino").hidden = false;
+  $("titolo-dettaglio-mag").textContent = "Lotti in giacenza";
+  $("dettaglio-magazzino-testo").innerHTML = '<div class="loading">carico i dati…</div>';
+  // pannello laterale destro (schermi larghi): niente scroll da nessuna parte
+  if (getComputedStyle($("dettaglio-magazzino")).position !== "fixed")
+    $("dettaglio-magazzino").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  try {
+    const r = await fetch("/api/magazzino/lotti/" + prodotto_id);
+    const dati = await r.json();
+    if (!r.ok) throw new Error(typeof dati.detail === "string" ? dati.detail : "Lotti non raggiungibili.");
+    renderLottiGiacenza(prodotto_id, dati, marca);
+  } catch (e) {
+    $("dettaglio-magazzino-testo").innerHTML = '<div class="loading">' + esc(e.message) + "</div>";
+  }
+}
+
+function renderLottiGiacenza(prodotto_id, lotti, marca) {
+  const s = MAG_DATI.stat.find(x => x.prodotto_id === prodotto_id) || {};
+  const um = s.um || "";
+  // raggruppo per marca, in ordine FEFO (già dal server); la marca CLICCATA
+  // (riga figlia) va in cima: è quella che ti interessa (scelta di Nicolas)
+  const gruppi = [];
+  lotti.forEach(l => {
+    let g = gruppi.find(x => x.marca === l.marca);
+    if (g) g.lotti.push(l);
+    else gruppi.push({ marca: l.marca, lotti: [l] });
+  });
+  gruppi.sort((a, b) =>
+    (a.marca === marca ? 0 : 1) - (b.marca === marca ? 0 : 1));
+  const tot = lotti.reduce((t, l) => t + l.quantita_residua, 0);
+  let html =
+    "<div class='det-riga'><span>Prodotto</span><b>" + esc(s.nome || "") + "</b></div>" +
+    "<div class='det-riga'><span>In giacenza</span><b>" + fmt(tot) + "\u00A0" + esc(um) +
+    "</b> · " + lotti.length + " lott" + (lotti.length === 1 ? "o" : "i") +
+    " · " + gruppi.length + " march" + (gruppi.length === 1 ? "a" : "e") + "</div>";
+  gruppi.forEach(g => {
+    const residua = g.lotti.reduce((t, l) => t + l.quantita_residua, 0);
+    html += "<h2 style='margin-top:14px'>" + marcaBadge(g.marca) +
+      ' <span class="muted">' + fmt(residua) + "\u00A0" + esc(um) + " · " +
+      g.lotti.length + " lott" + (g.lotti.length === 1 ? "o" : "i") + "</span></h2>" +
+      "<table><tr><th>Lotto</th><th>Fornitore</th><th>Arrivo</th>" +
+      "<th class='num'>Rimasto</th><th class='td-scad'>Scadenza</th><th class='num'>Costo</th></tr>" +
+      g.lotti.map(l =>
+        "<tr data-lotto='" + l.id + "'>" +
+        "<td class='mono'>" + esc(l.codice_lotto) + "</td>" +
+        "<td>" + esc(l.fornitore) + "</td>" +
+        "<td>" + esc(l.data_arrivo) + "</td>" +
+        "<td class='num'>" + fmt(l.quantita_residua) + "\u00A0" + esc(um) +
+        " <span class='muted'>di " + fmt(l.quantita) + "</span></td>" +
+        "<td class='td-scad'>" + esc(l.data_scadenza) + " " + badgeScadenza(l) + "</td>" +
+        "<td class='num'>" + (l.prezzo_unitario == null ? "—" :
+          eur(l.prezzo_unitario) + "/" + esc(um) +
+          (l.iva != null ? " <span class='muted'>+ IVA " + fmt(l.iva) + "%</span>" : "")) +
+        "</td></tr>"
+      ).join("") + "</table>";
+  });
+  $("dettaglio-magazzino-testo").innerHTML = html;
+}
+
+// click su un LOTTO del pannello → scheda completa di tracciabilità
+// (stessi dati del dettaglio di Arrivi: arrivo, scadenza, costi e "Usato in")
+// dentro lo STESSO pannello, col tasto ◀ per tornare alla lista dei lotti.
+// Da "Esauriti" invece niente lista a cui tornare: ◀ chiude il pannello
+$("dettaglio-magazzino-testo").addEventListener("click", e => {
+  const tr = e.target.closest("tr[data-lotto]");
+  if (tr && !e.target.closest("button")) apriSchedaLottoMagazzino(Number(tr.dataset.lotto));
+});
+
+// righe della card Esauriti → stessa scheda di tracciabilità del lotto
+$("mag-esauriti").addEventListener("click", e => {
+  const tr = e.target.closest("tr[data-lotto]");
+  if (tr && !e.target.closest("button")) apriSchedaLottoMagazzino(Number(tr.dataset.lotto), true);
+});
+
+let MAG_PANNELLO_LOTTI = null;   // {prodotto_id, marca}: dove era aperta la lista
+
+async function apriSchedaLottoMagazzino(id, daEsauriti = false) {
+  // aperta dagli ESAURITI non c'è lista a cui tornare: ◀ chiude
+  if (daEsauriti) MAG_PANNELLO_LOTTI = null;
+  // RIFIN 40: dalla card Esauriti il pannello non è mai stato svelato:
+  // senza questi comandi il click "non faceva comparire nulla"
+  $("dettaglio-magazzino").hidden = false;
+  if (getComputedStyle($("dettaglio-magazzino")).position !== "fixed")
+    $("dettaglio-magazzino").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  $("titolo-dettaglio-mag").textContent = "Scheda lotto";
+  $("dettaglio-magazzino-testo").innerHTML = '<div class="loading">carico i dati…</div>';
+  try {
+    const risposta = await fetch("/api/arrivi/" + id);
+    if (!risposta.ok) throw new Error("HTTP " + risposta.status + " dal server.");
+    const dati = await risposta.json();
+    if (!dati.lotto || !dati.usato_in)
+      throw new Error("Il server risponde con un formato vecchio: riavvialo con avvia.bat e ricarica la pagina.");
+    const l = dati.lotto;
+    const usato = (dati.usato_in || []).length
+      ? "<table><tr><th>Produzione</th><th>Data</th><th class='num'>Quantità usata</th></tr>" +
+        dati.usato_in.map(u =>
+          "<tr><td class='mono'>" + esc(u.codice_lotto) + "</td><td>" + esc(u.data_produzione) +
+          "</td><td class='num'>" + fmt(u.quantita_usata) + "\u00A0" + esc(l.um || "") + "</td></tr>").join("") +
+        "</table>"
+      : "<p class='muted'>Nessuna produzione ha ancora usato questo lotto.</p>";
+    $("dettaglio-magazzino-testo").innerHTML =
+      '<p><button class="btn sec mini" id="mag-torna-lotti">' +
+      (daEsauriti ? "◀ Esauriti" : "◀ Lotti in giacenza") + "</button></p>" +
+      "<div class='det-riga'><span>Prodotto</span><b>" + esc(l.prodotto) +
+      (l.marca_effettiva ? " · " + esc(l.marca_effettiva) : "") + "</b></div>" +
+      "<div class='det-riga'><span>Fornitore</span><b>" + esc(l.fornitore) + "</b></div>" +
+      "<div class='det-riga'><span>Lotto fornitore</span><b class='mono'>" + esc(l.codice_lotto) + "</b></div>" +
+      "<div class='det-riga'><span>Arrivo</span><b>" + esc(l.data_arrivo) + "</b></div>" +
+      "<div class='det-riga'><span>Scadenza</span><b>" + esc(l.data_scadenza) +
+      "</b> " + badgeScadenza(l) + "</div>" +
+      "<div class='det-riga'><span>Quantità</span><b>" + fmt(l.quantita) + "\u00A0" + esc(l.um || "") +
+      "</b> · rimasti <b>" + fmt(l.quantita_residua) + "\u00A0" + esc(l.um || "") + "</b></div>" +
+      (l.prezzo_unitario != null
+        ? "<div class='det-riga'><span>Costo</span><b>€ " + fmt(l.prezzo_unitario) + "/" + esc(l.um || "u.m.") +
+          (l.iva != null ? " + IVA " + fmt(l.iva) + "%" : "") + " · totale " + eur(l.totale) +
+          " → " + eur(l.totale_iva) + "</b></div>" : "") +
+      (l.data_esaurimento
+        ? "<div class='det-riga'><span>Esaurito il</span><b>" + esc(l.data_esaurimento) +
+          "</b> <span class='badge b-red'>0 azzerato</span></div>" : "") +
+      "<h2 style='margin-top:14px'>Usato in</h2>" + usato +
+      (l.data_esaurimento
+        ? "<div class='f-azioni'>" +
+          '<div class="hint">Azzerato per sbaglio? Ripristino la residua com\'era prima: ' +
+          'il lotto esce da "Esauriti" e torna in giacenza.</div>' +
+          '<button class="btn sec mini" id="mag-ripristina-lotto">↩ Ripristina residua</button></div>'
+        : "") +
+      (l.quantita_residua > 0
+        ? "<div class='f-azioni'>" +
+          '<div class="hint">Finito fuori produzione? (es. il latte del bar): la residua va a 0 ' +
+          "e il lotto finisce in \"Esauriti\", senza cancellarsi: la tracciabilità resta.</div>" +
+          '<button class="btn sec mini rosso" id="mag-azzera-lotto">0 Azzera residua</button></div>'
+        : "");
+    $("mag-torna-lotti").addEventListener("click", () => {
+      if (MAG_PANNELLO_LOTTI)
+        apriLottiMagazzino(MAG_PANNELLO_LOTTI.prodotto_id, MAG_PANNELLO_LOTTI.marca);
+      else
+        $("dettaglio-magazzino").hidden = true;   // niente lista dietro: chiudi
+    });
+    const azzera = $("mag-azzera-lotto");
+    if (azzera) azzera.addEventListener("click", async () => {
+      if (!confirm("Azzerare il lotto " + l.codice_lotto + "? La residua (" +
+        fmt(l.quantita_residua) + " " + (l.um || "") + ") va a 0. Il lotto NON si cancella: " +
+        "resta in \"Esauriti\" per la tracciabilità.")) return;
+      try {
+        const r = await fetch("/api/arrivi/" + l.id + "/azzera", { method: "POST" });
+        if (!r.ok) {
+          const corpo = await r.json().catch(() => ({}));
+          throw new Error(typeof corpo.detail === "string" ? corpo.detail : "Azzeramento rifiutato.");
+        }
+        $("dettaglio-magazzino").hidden = true;
+        sezioniCaricate.magazzino = false;
+        sezioniCaricate.scadenze = false;   // un lotto a 0 non è più "in scadenza"
+        sezioniCaricate.dashboard = false;
+        avviaMagazzino();
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+    const ripristina = $("mag-ripristina-lotto");
+    if (ripristina) ripristina.addEventListener("click", async () => {
+      // quanto tornerà in residua: la foto pre-azzeramento, o la
+      // quantità originale se azzerato prima della RIFIN 39
+      const residua = l.residua_pre_azzeramento != null
+        ? l.residua_pre_azzeramento : l.quantita;
+      if (!confirm("Ripristinare il lotto " + l.codice_lotto + "? La residua torna a " +
+        fmt(residua) + " " + (l.um || "") + ": il lotto esce da \"Esauriti\" " +
+        "e rientra in giacenza.")) return;
+      try {
+        const r = await fetch("/api/arrivi/" + l.id + "/ripristina", { method: "POST" });
+        if (!r.ok) {
+          const corpo = await r.json().catch(() => ({}));
+          throw new Error(typeof corpo.detail === "string" ? corpo.detail : "Ripristino rifiutato.");
+        }
+        $("dettaglio-magazzino").hidden = true;
+        sezioniCaricate.magazzino = false;
+        sezioniCaricate.scadenze = false;
+        sezioniCaricate.dashboard = false;
+        avviaMagazzino();
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+  } catch (e) {
+    $("dettaglio-magazzino-testo").innerHTML = '<div class="loading">' + esc(e.message) + "</div>";
+  }
+}
+
+$("chiudi-dettaglio-mag").addEventListener("click", () => { $("dettaglio-magazzino").hidden = true; });
 
 /* ========================= Produzioni ========================= */
 
@@ -954,12 +1227,13 @@ function popolaUmQta(um) {
   NP_UM = um || null;
   NP_UM_SCELTA = NP_UM;
   NP_RESA_PREFILL = null;
-  // TUTTE le u.m. dell'app, non solo il fratello: in laboratorio si produce
-  // anche a teglie/porzioni. Se il prodotto non dichiara u.m. non c'è
-  // niente di sensato da proporre.
-  const opzioni = NP_UM ? opzioniUmTutte(NP_UM, NP_UM) : "";
-  $("np-qta-um").innerHTML = opzioni;
-  $("np-qta-um").hidden = !opzioni;
+  // la tendina appare SOLO se il prodotto ha una u.m. canonica: senza una
+  // base nota una u.m. libera qui escluderebbe il lotto dal FEFO (regola
+  // che c'è sempre stata). Con la base c'è tutto il parco: in laboratorio
+  // si produce anche a teglie/porzioni.
+  $("np-qta-um").hidden = !NP_UM;
+  $("np-qta-um-id").value = idUmInPool(NP_UM);
+  $("np-qta-um").value = NP_UM || "";
 }
 
 function apriFormProduzione() {
@@ -990,11 +1264,13 @@ $("btn-nuova-produzione-dash").addEventListener("click", () => { mostraSezione("
 $("np-annulla").addEventListener("click", chiudiFormProduzione);
 $("overlay-produzione").addEventListener("click", (e) => { if (e.target === e.currentTarget) chiudiFormProduzione(); });
 
-// cambio u.m. della quantità prodotta: stesso TIPO -> conversione automatica;
-// tipo diverso (pz, teglie, porzioni) -> NESSUN calcolo: il default della
-// ricetta non vale più e si svuota, il numero lo scrive l'operatore
-$("np-qta-um").addEventListener("change", () => {
-  const nuova = $("np-qta-um").value;
+// cambio u.m. della quantità prodotta (RIFIN 35: tendina a cascata come
+// tutte le altre, pool dall'anagrafica u.m. + ➕ Crea in fondo): stesso
+// TIPO -> conversione automatica; tipo diverso (pz, teglie, porzioni) ->
+// NESSUN calcolo: il default della ricetta non vale più e si svuota,
+// il numero lo scrive l'operatore
+function cambiaUmQta(nuova) {
+  if (nuova === NP_UM_SCELTA) return;
   const f = fattoreUm(NP_UM_SCELTA, nuova);
   NP_UM_SCELTA = nuova;
   const q = Number($("np-qta").value);
@@ -1003,6 +1279,61 @@ $("np-qta-um").addEventListener("change", () => {
   } else if (NP_RESA_PREFILL != null && q === NP_RESA_PREFILL) {
     $("np-qta").value = "";
   }
+}
+
+async function creaUmDaProduzione(nome) {
+  // ➕ della tendina u.m.: crea l'u.m. in ANAGRAFICHE senza lasciare il form
+  // (REGOLA: la creazione non fa mai cambiare schermata), poi la seleziona.
+  // La card ⚖️ la rivedrà al prossimo passaggio (sezioniCaricate resettato).
+  if (!nome) return mostraErroreProduzione("Inserisci un nome.");
+  try {
+    const r = await fetch("/api/anagrafiche/unita-misura", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome })
+    });
+    const corpo = await r.json().catch(() => ({}));
+    if (!r.ok) return mostraErroreProduzione(typeof corpo.detail === "string" ? corpo.detail : "Creazione rifiutata.");
+    UMS.push(corpo);
+    if (ANAG_UM !== UMS && !ANAG_UM.some(u => u.id === corpo.id)) ANAG_UM.push(corpo);
+    sezioniCaricate.anagrafiche = false;
+    $("np-qta-um").value = corpo.nome;
+    $("np-qta-um-id").value = String(corpo.id);
+    cambiaUmQta(corpo.nome);
+  } catch (e) {
+    mostraErroreProduzione("Il server non risponde.");
+  }
+}
+
+creaCombo({
+  input: $("np-qta-um"), tendina: $("dd-npum"), idNascosto: $("np-qta-um-id"),
+  pool: poolUmCombo,
+  gruppo: u => GRUPPO_UM[u.nome] === "massa" ? "⚖ Massa (g ↔ kg)" :
+              GRUPPO_UM[u.nome] === "volume" ? "🧪 Volume (ml ↔ lt)" :
+              "🥣 Laboratorio (non converte)",
+  onPick: u => cambiaUmQta(u.nome),
+  onCrea: creaUmDaProduzione
+});
+
+// normalizzazione al blur (ritardo per non interferire con quello di
+// creaCombo): testo digitato che combacia ESATTAMENTE una u.m. del pool ->
+// selezionata; altrimenti si ripristina la scelta precedente
+$("np-qta-um").addEventListener("blur", () => {
+  setTimeout(() => {
+    const campo = $("np-qta-um");
+    if (campo.hidden || $("np-qta-um-id").value) return;
+    const testo = campo.value.trim().toLowerCase();
+    if (testo) {
+      const u = poolUmCombo().find(x => x.nome.toLowerCase() === testo);
+      if (u) {
+        campo.value = u.nome;
+        $("np-qta-um-id").value = u.id > 0 ? String(u.id) : "";
+        cambiaUmQta(u.nome);
+        return;
+      }
+    }
+    campo.value = NP_UM_SCELTA || "";
+  }, 220);
 });
 
 creaCombo({
@@ -1109,29 +1440,29 @@ function opzioniUm(um, scelta) {
     '<option value="' + fratello + '"' + (scelta === fratello ? " selected" : "") + ">" + fratello + "</option>";
 }
 
-function opzioniUmTutte(um, scelta) {
-  // TUTTE le u.m. che esistono: prima l'anagrafica delle u.m. (RIFIN 34),
-  // poi quelle ancora in uso sui prodotti (l'utente può digitare u.m. libere
-  // nei form prodotti senza crearle in anagrafica: qui appaiono uguale).
-  const pool = [um, FRATELLO_UM[um]];
-  for (const u of UMS) if (u.nome) pool.push(u.nome);
-  for (const p of INGREDIENTI.concat(PRODOTTI_LAB).concat(PRODUCIBILI))
-    if (p.unita_misura) pool.push(p.unita_misura);
-  const base = ["g", "kg", "ml", "lt"];
-  const viste = new Set();
-  const ordine = [];
-  for (const u of pool)
-    if (u && !viste.has(u)) { viste.add(u); ordine.push(u); }
-  ordine.sort((a, b) => {
-    const ia = base.indexOf(a), ib = base.indexOf(b);
-    if (ia >= 0 && ib >= 0) return ia - ib;
-    if (ia >= 0) return -1;
-    if (ib >= 0) return 1;
-    return a.localeCompare(b);
-  });
-  return ordine.map(u =>
-    '<option value="' + esc(u) + '"' + (scelta === u ? " selected" : "") + ">" + esc(u) + "</option>"
-  ).join("");
+// pool della tendina u.m. "quantità prodotta" (RIFIN 35): prima le 4 di
+// sistema (g kg ml lt, id negativi: NON sono righe di anagrafica), poi
+// l'anagrafica delle u.m. (RIFIN 34, id veri per il ➕/blur), poi le u.m.
+// libere digitate nei form prodotti senza passar dall'anagrafica.
+function poolUmCombo() {
+  const viste = new Set(["g", "kg", "ml", "lt"]);
+  const pool = ["g", "kg", "ml", "lt"].map((n, i) => ({ id: -(i + 1), nome: n }));
+  const custom = [];
+  for (const u of UMS)
+    if (u.nome && !viste.has(u.nome)) { viste.add(u.nome); custom.push(u); }
+  custom.sort((a, b) => a.nome.localeCompare(b.nome));
+  for (const p of INGREDIENTI.concat(PRODOTTI_LAB).concat(PRODUCIBILI)) {
+    const n = p.unita_misura;
+    if (n && !viste.has(n)) { viste.add(n); pool.push({ id: -(1000 + pool.length), nome: n }); }
+  }
+  return pool.concat(custom);
+}
+
+// id di anagrafica di una u.m., "" se non è una riga dell'anagrafica
+function idUmInPool(nome) {
+  if (!nome) return "";
+  const u = poolUmCombo().find(x => x.nome === nome);
+  return u && u.id > 0 ? String(u.id) : "";
 }
 
 function selUmRiga(i, riga) {
@@ -2034,6 +2365,10 @@ function flashRicette(testo) {
 }
 
 $("btn-nuova-ricetta").addEventListener("click", () => apriFormRicetta(null));
+// 🖨 il libro ricette HACCP: il server compone il PDF e il browser lo apre
+$("btn-libro-ricette").addEventListener("click", () => {
+  window.open("/api/ricette/libro.pdf", "_blank");
+});
 // ➕ Aggiungi ingrediente: STATICO, staccato dalla tab delle righe, così
 // resta visibile anche dopo aver eliminato tutte le righe (prima spariva)
 $("nr-aggiungi").addEventListener("click", aggiungiRigaR);

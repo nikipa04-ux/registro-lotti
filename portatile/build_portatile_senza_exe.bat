@@ -61,7 +61,17 @@ if not exist "downloads\python-embed.zip" goto DOWNLOAD_FALLITO
 :EMBED_OK
 echo Python embeddable: OK
 
-REM --- 3. Cartella del pacchetto: sempre fresca
+REM --- 3. Cartella del pacchetto: sempre fresca, MA i dati si conservano
+if exist "RegistroLotti\data" goto SALVA_DATI
+goto RIMUOVI_PKG
+
+:SALVA_DATI
+echo Conservo i tuoi dati: RegistroLotti\data viene messa da parte.
+if exist "_data_backup" goto BACKUP_BLOCCATO
+move /Y "RegistroLotti\data" "_data_backup" >nul
+if not exist "_data_backup" goto DATI_FALLITI
+
+:RIMUOVI_PKG
 if exist "RegistroLotti" rmdir /s /q RegistroLotti
 mkdir RegistroLotti
 tar -xf "downloads\python-embed.zip" -C RegistroLotti
@@ -85,7 +95,17 @@ if errorlevel 8 goto APP_FALLITA
 mkdir "RegistroLotti\Lancio"
 copy /Y registro_lotti.py "RegistroLotti\Lancio\registro_lotti.py" >nul
 if errorlevel 1 goto APP_FALLITA
+REM --- 6b. Cartella dati: ripristino quella salvata, altrimenti nuova
+if exist "_data_backup" goto RIPRISTINA_DATI
 mkdir "RegistroLotti\data"
+goto DATI_PRONTI
+
+:RIPRISTINA_DATI
+echo Rimetto a posto i tuoi dati: RegistroLotti\data
+move /Y "_data_backup" "RegistroLotti\data" >nul
+if not exist "RegistroLotti\data" goto DATI_FALLITI
+
+:DATI_PRONTI
 
 REM --- 7. Bat di avvio del pacchetto
 echo @echo off> "RegistroLotti\RegistroLotti.bat"
@@ -133,6 +153,15 @@ goto FINE_ERRORE
 
 :APP_FALLITA
 echo [ERRORE] Copia del codice dell'app fallita.
+goto FINE_ERRORE
+
+:BACKUP_BLOCCATO
+echo [ERRORE] Esiste gia' _data_backup da un giro interrotto: dentro c'e' la tua cartella data.
+echo Aprila e recupera i dati a mano, poi rilancia la build.
+goto FINE_ERRORE
+
+:DATI_FALLITI
+echo [ERRORE] Spostamento dei dati fallito: fermo tutto per non perdere nulla.
 goto FINE_ERRORE
 
 :FINE_ERRORE
