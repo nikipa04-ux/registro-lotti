@@ -79,3 +79,73 @@ def test_fallback_qta_prodotta_nulla_usa_la_resa(conn):
     conn.commit()
     acc = ingredienti_lotto(conn, 2)
     assert acc[2] == pytest.approx(1.7)  # identico: 5 kg == resa 5 kg
+
+
+# ---- RIFIN 44: ingredienti COMPOSTI (denominazione = parti) ----
+
+def _produzione_con_cioccolato(conn, denominazione, qta_cioccolato=2.0):
+    """Lungo interno 3 che usa 2 kg di cioccolato (composto) + 3 kg di
+    zucchero DIRETTO: il caso guida del dopppione 'zucchero'."""
+    conn.execute(
+        "INSERT INTO prodotti (id, nome, sigla, denominazione_legale) "
+        "VALUES (6, 'Cioccolato fondente', 'CIO', ?)", (denominazione,))
+    conn.execute(
+        "INSERT INTO lotti_ingresso (id, prodotto_id, fornitore_id, codice_lotto, "
+        "data_arrivo, data_scadenza, quantita, quantita_residua) "
+        "VALUES (4, 6, 1, 'L4', '2026-11-01', '2027-05-01', 10, 10)")
+    conn.execute(
+        "INSERT INTO lotti_interni (id, prodotto_id, qta_prodotta, codice_lotto, "
+        "data_produzione, data_scadenza) VALUES (3, 5, 60, 'BIG-20261122-01', "
+        "'2026-11-22', '2026-11-29')")
+    conn.execute(
+        "INSERT INTO consumi (lotto_interno_id, origine, lotto_origine_id, quantita_usata) "
+        "VALUES (3, 'ingresso', 4, ?), (3, 'ingresso', 3, 3)", (qta_cioccolato,))
+    conn.commit()
+
+
+def test_composto_splittato_in_parti_appiattite(conn):
+    # denominazione del cioccolato = SOLO le parti separate da virgola:
+    # in etichetta una riga per parte, il nome del composto sparisce
+    # (le parti restano scritte come le ha digitate chi crea l'ingrediente)
+    _produzione_con_cioccolato(conn, "Zucchero, Pasta di cacao, Burro di cacao")
+    r = etichetta(conn, 3)
+    nomi = [riga["denominazione"] for riga in r["righe"]]
+    # lo zucchero DIRETTO (3 kg) pesa piu' del cioccolato (2 kg): la sua
+    # riga resta; la parte 'zucchero' del composto deduplica via
+    assert nomi == ["Zucchero", "Pasta di cacao", "Burro di cacao"]
+    assert "Cioccolato fondente" not in nomi
+    # le parti ereditano il peso del composto: contano solo per l'ordine
+    assert r["righe"][1]["qta"] == pytest.approx(2.0)
+
+
+def test_composto_dedup_senza_maiuscole_e_allergeni_comunque_dichiarati(conn):
+    # due composti che dichiarano le STESSE parti (maiuscole diverse):
+    # le righe compaiono UNA volta sola, MA gli allergeni del composto
+    # deduplicato sono comunque entrati nel prodotto finito
+    conn.execute(
+        "INSERT INTO prodotti (id, nome, sigla, denominazione_legale) "
+        "VALUES (6, 'Cioccolato fondente', 'CIO', 'zucchero, cacao')")
+    conn.execute(
+        "INSERT INTO prodotti (id, nome, sigla, denominazione_legale) "
+        "VALUES (7, 'Copertura al cacao', 'CDC', 'Zucchero, Cacao')")
+    conn.execute(
+        "INSERT INTO prodotti_allergeni VALUES (7, 1)")  # dichiara LATTE
+    for aid, pid in [(4, 6), (5, 7)]:
+        conn.execute(
+            "INSERT INTO lotti_ingresso (id, prodotto_id, fornitore_id, codice_lotto, "
+            "data_arrivo, data_scadenza, quantita, quantita_residua) "
+            "VALUES (?, ?, 1, 'L', '2026-11-01', '2027-05-01', 10, 10)", (aid, pid))
+    conn.execute(
+        "INSERT INTO lotti_interni (id, prodotto_id, qta_prodotta, codice_lotto, "
+        "data_produzione, data_scadenza) VALUES (3, 5, 60, 'BIG-20261122-02', "
+        "'2026-11-22', '2026-11-29')")
+    conn.execute(
+        "INSERT INTO consumi (lotto_interno_id, origine, lotto_origine_id, quantita_usata) "
+        "VALUES (3, 'ingresso', 4, 2), (3, 'ingresso', 5, 1)")
+    conn.commit()
+    r = etichetta(conn, 3)
+    nomi = [riga["denominazione"] for riga in r["righe"]]
+    # il primo composto (2 kg) scrive le parti; il secondo (1 kg) e'
+    # TUTTO doppione: via. L'allergene LATTE della copertura resta
+    assert nomi == ["zucchero", "cacao"]
+    assert r["allergeni"] == ["Latte"]

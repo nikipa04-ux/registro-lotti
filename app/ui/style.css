@@ -288,6 +288,14 @@ ol.etichetta li { margin-bottom: 3px; }
   gap: 10px; margin-bottom: 10px; }
 .card-head h2 { margin: 0; }
 .anag-cerca { width: 100%; margin-bottom: 10px; }
+.azioni-gruppo { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dens-lista { border: 1px solid var(--line); border-radius: 8px;
+  max-height: 300px; overflow-y: auto; margin-bottom: 12px; }
+.dens-riga { display: flex; justify-content: space-between; align-items: center;
+  gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.dens-riga:last-child { border-bottom: none; }
+.dens-riga .parola { font-weight: 600; }
+.dens-riga button { margin-left: 6px; }
 .scroll-list { border: 1px solid var(--line); border-radius: 8px; overflow-y: auto; }
 .anag-alta { max-height: 420px; }
 .anag-bassa { max-height: 260px; }

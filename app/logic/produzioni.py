@@ -7,9 +7,16 @@ ingresso (le giacenze non si scrivono mai a mano).
 
 v0.1: i lotti interni consumati (semilavorati) non tracciano la residua:
 la loro "disponibilità" è la quantità prodotta.
+RIFIN 54: COMPRESO anche il magazzino dei semilavorati: la disponibilità
+di un lotto interno è qta_prodotta MENO ciò che le altre produzioni ne
+hanno consumato; il verbale rifiuta di scaricare lotti interni oltre la
+disponibilità, come fa con gli arrivi ("Giacenza insufficiente").
+Annullare una produzione restituisce da solo la merce: i consumi se ne
+vanno con il verbale.
 """
 from datetime import date
 
+from .anagrafiche import _tipo  # RIFIN 49: articolo vero vs candidato senza ricetta
 from .fefo import copertura_fefo, ordina_fefo
 from .lotti import genera_codice
 from . import um
@@ -35,6 +42,22 @@ def _oggi(oggi):
     return oggi
 
 
+def _residua_interna(conn, lotto_interno_id):
+    """RIFIN 54: la disponibilità di un lotto INTERNO (semilavorato) è
+    quanto è stato prodotto MENO quanto le altre produzioni ne hanno
+    già consumato: niente crema sovra-consumata nei verbali."""
+    riga = conn.execute(
+        "SELECT li.qta_prodotta AS prodotta, COALESCE((SELECT SUM(c.quantita_usata) "
+        "FROM consumi c WHERE c.origine = 'interno' "
+        "AND c.lotto_origine_id = li.id), 0) AS usata "
+        "FROM lotti_interni li WHERE li.id = ?",
+        (lotto_interno_id,),
+    ).fetchone()
+    if not riga:
+        return 0.0
+    return (riga["prodotta"] or 0) - riga["usata"]
+
+
 def lotti_disponibili(conn, ingrediente_id, oggi=None):
     """Lotti utilizzabili di un ingrediente, già ordinati FEFO.
 
@@ -54,11 +77,16 @@ def lotti_disponibili(conn, ingrediente_id, oggi=None):
         lotti.append(dict(r))
     for r in conn.execute(
         "SELECT li.id, li.codice_lotto, li.data_scadenza, "
-        "li.data_produzione AS data_arrivo, li.qta_prodotta AS quantita_residua, "
+        "li.data_produzione AS data_arrivo, "
+        "li.qta_prodotta - COALESCE((SELECT SUM(c.quantita_usata) FROM consumi c "
+        "WHERE c.origine = 'interno' AND c.lotto_origine_id = li.id), 0) "
+        "AS quantita_residua, "
         "'interno' AS origine, NULL AS fornitore "
         "FROM lotti_interni li "
         "JOIN prodotti p ON p.id = li.prodotto_id "
         "WHERE li.prodotto_id = ? AND li.data_scadenza >= ? "
+        "AND (li.qta_prodotta - COALESCE((SELECT SUM(c.quantita_usata) FROM consumi c "
+        "WHERE c.origine = 'interno' AND c.lotto_origine_id = li.id), 0)) > 0 "
         # un lotto prodotto in u.m. NON convertibile (es. 6 teglie di un
         # prodotto in pz) non si traduce in giacenza canonica: la FEFO non
         # lo propone (regola di progetto: nessuna conversione fra tipi)
@@ -88,10 +116,14 @@ def proponi_produzione(conn, prodotto_id, oggi=None):
     ricetta = conn.execute(
         "SELECT * FROM ricette WHERE prodotto_id = ?", (prodotto_id,)
     ).fetchone()
-    # Si produce solo ciò che ha una RICETTA master. Se il prodotto non ha
-    # famiglia è quasi certamente un ingrediente acquistato: messaggio chiaro.
+    # Si produce solo ciò che ha una RICETTA master. Il discriminante è il
+    # TIPO vero (_tipo): un INGREDIENTE acquistato (conservazione o arrivi)
+    # non si produce e non si produce MAI; un prodotto di laboratorio nato
+    # dal ➕ senza ricetta (il "candidato") deve invece ricevere il messaggio
+    # che parla di RICETTA: è quello che fa comparire nella UI il pulsante
+    # "➕ Crea la ricetta di X ora" (RIFIN 49).
     if not ricetta:
-        if prodotto["famiglia_id"] is None:
+        if _tipo(conn, prodotto) == "ingrediente":
             raise ErroreProduzione(
                 f'"{prodotto["nome"]}" è un ingrediente acquistato: '
                 "si producono solo i prodotti di laboratorio"
@@ -109,8 +141,8 @@ def proponi_produzione(conn, prodotto_id, oggi=None):
 
     righe = []
     for r in conn.execute(
-        "SELECT rr.ingrediente_id, rr.quantita, p.nome, p.unita_misura, "
-        "fr.nome AS famiglia "
+        "SELECT rr.ingrediente_id, rr.quantita, rr.um_scritta, p.nome, "
+        "p.unita_misura, p.densita, fr.nome AS famiglia "
         "FROM ricette_righe rr "
         "JOIN prodotti p ON p.id = rr.ingrediente_id "
         "LEFT JOIN ricette ric ON ric.prodotto_id = rr.ingrediente_id "
@@ -127,6 +159,11 @@ def proponi_produzione(conn, prodotto_id, oggi=None):
             "ingrediente_id": r["ingrediente_id"],
             "nome": r["nome"],
             "um": r["unita_misura"],
+            # RIFIN 51: la riga parte COME L'HAI SCRITTA in ricetta ('500 g'
+            # di latte in lt): l'operatore vede la bilancia, il verbale e lo
+            # scarico restano in canonica. densita: il ponte peso<->volume
+            "um_scritta": r["um_scritta"],
+            "densita": r["densita"],
             "famiglia": r["famiglia"],
             "qta_ricetta": r["quantita"],
             "lotti": [
@@ -216,6 +253,7 @@ def registra_produzione(conn, dati):
         )
 
     scarico = {}   # lotto ingresso -> totale prelevato
+    scarico_interno = {}   # RIFIN 54: lotto interno -> prelevato (semilavorati)
     visti = set()  # (origine, lotto): il verbale non ripete lo stesso lotto
     usati = set()  # prodotti (ingredienti) toccati dal verbale: serve allo
                    # snapshot "ricetta modificata" qui sotto
@@ -249,6 +287,7 @@ def registra_produzione(conn, dati):
             if not lotto:
                 raise ErroreProduzione("Lotto interno inesistente")
             usati.add(lotto["prodotto_id"])
+            scarico_interno[lotto_id] = scarico_interno.get(lotto_id, 0.0) + qta
 
     for lotto_id, qta in scarico.items():
         residua = conn.execute(
@@ -257,6 +296,17 @@ def registra_produzione(conn, dati):
         if qta > (residua or 0) + 1e-9:
             raise ErroreProduzione(
                 f"Giacenza insufficiente: servono {qta:g}, nel lotto ce ne sono {residua:g}"
+            )
+
+    # RIFIN 54: il semilavorato si scarica dalla sua SCORSA residua:
+    # prodotta meno quanto le altre produzioni ne hanno già prelevato.
+    # Un lotto da 1 kg non può certo finire in due verbali da 0,8.
+    for lotto_id, qta in scarico_interno.items():
+        residua = _residua_interna(conn, lotto_id)
+        if qta > residua + 1e-9:
+            raise ErroreProduzione(
+                f"Giacenza insufficiente: servono {qta:g}, nel lotto interno "
+                f"ce ne restano {residua:g}"
             )
 
     # RICETTA MODIFICATA (SNAPSHOT): l'insieme degli ingredienti USATI
@@ -339,10 +389,26 @@ def elimina_produzione(conn, lotto_id):
         "WHERE lotto_interno_id = ? AND origine = 'ingresso'",
         (lotto_id,),
     ).fetchall():
-        conn.execute(
-            "UPDATE lotti_ingresso SET quantita_residua = quantita_residua + ? "
-            "WHERE id = ?",
-            (c["quantita_usata"], c["lotto_origine_id"]),
-        )
+        lotto = conn.execute(
+            "SELECT residua_pre_azzeramento FROM lotti_ingresso WHERE id = ?",
+            (c["lotto_origine_id"],),
+        ).fetchone()
+        if lotto and lotto["residua_pre_azzeramento"] is not None:
+            # RIFIN 54: il lotto era stato AZZERATO a mano (uso bar, ecc.)
+            # e chiuso: la merce che il verbale riporta indietro NON lo
+            # riapre, si mette nella pila dell'azzeramento (foto). Niente
+            # giacenze fantasma nei lotti chiusi: se anche l'azzeramento
+            # era uno sbaglio, il RIPRISTINO del lotto se ne occupa.
+            conn.execute(
+                "UPDATE lotti_ingresso SET residua_pre_azzeramento = "
+                "residua_pre_azzeramento + ? WHERE id = ?",
+                (c["quantita_usata"], c["lotto_origine_id"]),
+            )
+        else:
+            conn.execute(
+                "UPDATE lotti_ingresso SET quantita_residua = quantita_residua + ? "
+                "WHERE id = ?",
+                (c["quantita_usata"], c["lotto_origine_id"]),
+            )
     conn.execute("DELETE FROM consumi WHERE lotto_interno_id = ?", (lotto_id,))
     conn.execute("DELETE FROM lotti_interni WHERE id = ?", (lotto_id,))

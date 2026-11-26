@@ -19,6 +19,8 @@ manuale HACCP che si ristampa quando cambia una ricetta.
 """
 from datetime import date
 
+from .etichetta import parti_denominazione
+from . import um
 from .etichetta_pdf import (
     ALTEZZA_A4,
     LARGHEZZA_A4,
@@ -80,7 +82,14 @@ def allergeni_ricetta(conn, prodotto_id, _visti=None):
 def schede_ricette(conn):
     """Le schede del libro: [{prodotto, famiglia, resa, righe, allergeni...}].
 
-    righe: [{nome, quantita, um, semilavorato}] nell'ordine della ricetta.
+    righe: [{nome, quantita, um, semilavorato, parti}] nell'ordine della
+    ricetta. RIFIN 44, composti: se la denominazione legale di un
+    ingrediente contiene le parti separate da virgola ('zucchero, pasta
+    di cacao, burro di cacao' per il cioccolato), la scheda gli aggiunge
+    "parti": una riga per parte, appiattita e SENZA dose (le parti non
+    hanno quantita' propria). Gia' DEDUPLICATE dentro la scheda: una
+    parte uguale (senza badare a maiuscole) al nome di un ingrediente
+    che c'e' gia', o a una parte gia' scritta, compare UNA volta sola.
     Questa funzione è il contratto dei test (e del PDF).
     """
     schede = []
@@ -95,8 +104,9 @@ def schede_ricette(conn):
     for ric in ricette:
         righe = []
         for r in conn.execute(
-            "SELECT rr.ingrediente_id, rr.quantita, p.nome, "
-            "p.unita_misura AS um, (SELECT COUNT(*) FROM ricette r2 "
+            "SELECT rr.ingrediente_id, rr.quantita, rr.um_scritta, p.nome, "
+            "p.denominazione_legale, p.unita_misura AS um, p.densita, "
+            "(SELECT COUNT(*) FROM ricette r2 "
             " WHERE r2.prodotto_id = rr.ingrediente_id) AS n_ricetta "
             "FROM ricette_righe rr "
             "JOIN prodotti p ON p.id = rr.ingrediente_id "
@@ -104,12 +114,37 @@ def schede_ricette(conn):
             "ORDER BY rr.id",
             (ric["prodotto_id"],),
         ).fetchall():
+            # RIFIN 51: il libro è il documento del LABORATORIO: la dose si
+            # mostra COME È STATA SCRITTA ('500 g'), la banca dati resta in
+            # canonica (0,485 lt): il ponte lo rifà um.fattore_liquido
+            qta, um_riga = r["quantita"], r["um"] or ""
+            if r["um_scritta"]:
+                f = um.fattore(r["um"], r["um_scritta"]) or um.fattore_liquido(
+                    r["um"], r["um_scritta"], r["densita"]
+                )
+                if f:
+                    qta, um_riga = r["quantita"] * f, r["um_scritta"]
             righe.append({
                 "nome": r["nome"],
-                "quantita": r["quantita"],
-                "um": r["um"] or "",
+                "quantita": qta,
+                "um": um_riga,
                 "semilavorato": r["n_ricetta"] > 0,
+                "parti": [],
+                "_denominazione": r["denominazione_legale"],
             })
+        # le parti dei composti, deduppate dentro la scheda: prima gli
+        # ingredienti VERI (chi c'e' gia' con la sua dose vince), poi le
+        # parti in ordine di dichiarazione
+        visti = {r["nome"].casefold() for r in righe}
+        for r in righe:
+            parti = parti_denominazione(r.pop("_denominazione"))
+            if len(parti) >= 2:
+                for parte in parti:
+                    chiave = parte.casefold()
+                    if chiave in visti:
+                        continue
+                    visti.add(chiave)
+                    r["parti"].append(parte)
         schede.append({
             "prodotto_id": ric["prodotto_id"],
             "prodotto": ric["nome"],
@@ -140,6 +175,11 @@ def _blocchi_scheda(s):
                 "- " + r["nome"] + " · " + _qt(r["quantita"]) +
                 (" " + r["um"] if r["um"] else ""),
                 "F1", 9.5, LARGH_UTILE))
+            # RIFIN 44, composti: le parti della denominazione legale come
+            # righe appiattite SOTTO l'ingrediente, senza dose
+            for parte in r["parti"]:
+                righe_ing.extend(_spezza(
+                    "- " + parte, "F1", 9.5, LARGH_UTILE))
         blocchi.append(("F1", 9.5, righe_ing))
     else:
         blocchi.append(("F1", 9.5, ["(ricetta senza ingredienti)"]))

@@ -8,16 +8,22 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..db import connessione
+from ..logic.um import DENSITA_TIPICHE, densita_suggerita
 from ..logic.anagrafiche import (
     ErroreAnagrafica,
+    aggiungi_densita_custom,
     crea_ingrediente,
     crea_unita,
     dettaglio_fornitore,
     dettaglio_prodotto,
+    elimina_densita_custom,
     elimina_fornitore,
     elimina_prodotto,
     elimina_unita,
     lista_ingredienti,
+    lista_anagrafica,
+    lista_candidati,
+    lista_densita_custom,
     lista_prodotti as lista_prodotti_lab,
     lista_unita,
     rinomina_famiglia,
@@ -66,15 +72,17 @@ def prodotti_lab(testo: str = "", famiglia_id: int = 0):
 
 @router.get("/prodotti")
 def lista_prodotti(ingrediente: bool | None = None):
-    """Un'unica tabella, due identità: ingrediente=True filtra famiglia NULL."""
+    """Un'unica tabella, due identità. RIFIN 46: il filtro è il TIPO vero
+    (vedi lista_anagrafica nella logica), non più il campo famiglia: un
+    CANDIDATO nato dal ➕ e ancora senza ricetta NON finisce tra gli
+    ingredienti (resta raggiungibile dal lato prodotti del combo
+    "Nuova ricetta", per completarlo)."""
     with connessione() as conn:
-        sql = ("SELECT p.*, f.nome AS famiglia FROM prodotti p "
-               "LEFT JOIN famiglie f ON f.id = p.famiglia_id")
-        if ingrediente is True:
-            sql += " WHERE p.famiglia_id IS NULL"
-        elif ingrediente is False:
-            sql += " WHERE p.famiglia_id IS NOT NULL"
-        return [dict(r) for r in conn.execute(sql + " ORDER BY p.nome").fetchall()]
+        return lista_anagrafica(
+            conn,
+            None if ingrediente is None
+            else ("ingrediente" if ingrediente else "prodotto"),
+        )
 
 
 @router.get("/famiglie")
@@ -125,6 +133,7 @@ class NuovoProdotto(BaseModel):
     sigla: str | None = None
     marca: str | None = None
     denominazione_legale: str | None = None
+    densita: float | None = None   # g/ml: se manca, il backend la eredita (RIFIN 53)
     allergeni: list[int] = []
 
 
@@ -154,6 +163,7 @@ class NuovoIngrediente(BaseModel):
     sigla: str | None = None
     marca: str | None = None
     denominazione_legale: str | None = None
+    densita: float | None = None   # g/ml (RIFIN 51): ponte peso<->volume
     note: str | None = None
     allergeni: list[int] = []
 
@@ -178,8 +188,65 @@ class SalvaProdotto(BaseModel):
     sigla: str | None = None
     marca: str | None = None
     denominazione_legale: str | None = None
+    densita: float | None = None   # g/ml (RIFIN 51): ponte peso<->volume
     note: str | None = None
     allergeni: list[int] | None = None
+
+
+@router.get("/densita-suggerita")
+def suggerita(nome: str):
+    """RIFIN 51: densità tipica SUGGERITA per nome, per il campo dell'anagrafica
+    ingrediente. Il valore è un default che l'utente conferma o cambia: la
+    densità vera resta sempre sua, scritta nella scheda (legata all'id).
+    RIFIN 52: prima le voci personalizzate, poi il catalogo del codice."""
+    with connessione() as conn:
+        trovata = densita_suggerita(conn, nome)
+        return {"parola": trovata[0] if trovata else None,
+                "densita": trovata[1] if trovata else None}
+
+
+@router.get("/densita-custom")
+def densita_custom_lista():
+    """RIFIN 52: le voci del catalogo. 'predefinite' arrivano dal codice
+    (um.py, read-only); 'custom' sono quelle dell'utente e VINCONO."""
+    with connessione() as conn:
+        return {"predefinite": [{"parola": p, "densita": d}
+                                for p, d in DENSITA_TIPICHE],
+                "custom": lista_densita_custom(conn)}
+
+
+class VoceDensita(BaseModel):
+    parola: str
+    densita: float | None = None   # g/ml
+
+
+@router.post("/densita-custom", status_code=201)
+def densita_custom_nuova(dati: VoceDensita):
+    """Aggiunge o corregge una voce (stessa parola = aggiorna il valore).
+    Se la parola esiste anche nel predefinito, la voce dell'utente vince."""
+    with connessione() as conn:
+        try:
+            voce = aggiungi_densita_custom(conn, dati.model_dump())
+        except ErroreAnagrafica as e:
+            _errore(e)
+        conn.commit()
+        return voce
+
+
+@router.delete("/densita-custom/{parola}", status_code=204)
+def densita_custom_elimina(parola: str):
+    """Toglie una voce dell'utente. Le predefinite non si eliminano."""
+    with connessione() as conn:
+        elimina_densita_custom(conn, parola)
+        conn.commit()
+
+
+@router.get("/candidati")
+def candidati():
+    """I CANDIDATI in attesa di ricetta (RIFIN 47): la riga in fondo alla
+    card Prodotti li mostra con Completa/Elimina. Vedi lista_candidati."""
+    with connessione() as conn:
+        return lista_candidati(conn)
 
 
 @router.get("/prodotti/{prodotto_id}")

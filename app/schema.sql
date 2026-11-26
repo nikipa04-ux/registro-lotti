@@ -54,6 +54,10 @@ CREATE TABLE IF NOT EXISTS prodotti (
     marca TEXT,                     -- marca abituale (default per gli arrivi)
     denominazione_legale TEXT,      -- dicitura dell'etichetta d'acquisto, per l'etichetta
                                     -- dei prodotti finiti; obbligatoria per gli ingredienti
+    densita REAL,                   -- g/ml, per gli ingredienti LIQUIDI (u.m. lt/ml):
+                                    -- il ponte peso<->volume (RIFIN 51). Opzionale e
+                                    -- SEMPRE dell'utente: l'app al massimo SUGGERISCE
+                                    -- un valore tipico in base al nome alla creazione
     note TEXT
 );
 
@@ -137,7 +141,10 @@ CREATE TABLE IF NOT EXISTS ricette_righe (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ricetta_id INTEGER NOT NULL REFERENCES ricette(id) ON DELETE CASCADE,
     ingrediente_id INTEGER NOT NULL REFERENCES prodotti(id),
-    quantita REAL NOT NULL,
+    quantita REAL NOT NULL,         -- SEMPRE in u.m. CANONICA dell'ingrediente
+    um_scritta TEXT,                -- come l'utente HA SCRITTO la dose ('g': 500 g di
+                                    -- latte restano 0,485 lt canonici ma il libro ricette
+                                    -- e le tendine mostrano i grammi). NULL = canonica
     UNIQUE (ricetta_id, ingrediente_id)
 );
 
@@ -170,4 +177,19 @@ CREATE INDEX IF NOT EXISTS idx_consumi_origine ON consumi(origine, lotto_origine
 CREATE TABLE IF NOT EXISTS impostazioni (
     chiave TEXT PRIMARY KEY,
     valore TEXT
+);
+
+-- ============================================================
+--  Densità tipiche PERSONALIZZATE (RIFIN 52)
+-- ============================================================
+-- Il catalogo che suggerisce la densità quando nasce un ingrediente
+-- vive nel codice (app/logic/um.py, DENSITA_TIPICHE: acqua, latte,
+-- olio...). Qui vivono le voci AGGIUNTE o CORRETTE dall'utente: alla
+-- creazione di un ingrediente queste VINCONO sulle predefinite (stesso
+-- matcher: parola intera, la più lunga vince, senza accenti).
+-- Il suggerimento resta un suggerimento: la densità vera è sempre
+-- quella scritta nella scheda dell'ingrediente (legata all'id).
+CREATE TABLE IF NOT EXISTS densita_custom (
+    parola TEXT PRIMARY KEY,  -- normalizzata: minuscolo, senza accenti, spazi singoli
+    densita REAL NOT NULL     -- g/ml, sempre > 0
 );

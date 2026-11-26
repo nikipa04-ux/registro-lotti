@@ -9,8 +9,11 @@ Nessun tag fisso tipo "semilavorato": la famiglia è un'etichetta libera,
 l'utente ne crea quante vuole. Un prodotto con ricetta è producibile;
 senza ricetta non lo è, che abbia o no una famiglia.
 """
-from .lotti import genera_codice  # noqa: F401  (usata dai test/seed)
+import re
 
+from . import um
+from .lotti import genera_codice  # noqa: F401  (usata dai test/seed)
+from .anagrafiche import _tipo, _fantasma   # RIFIN 45: candidati e duplicati
 
 class ErroreRicetta(ValueError):
     """Input respinto: il messaggio va mostrato all'utente così com'è."""
@@ -49,7 +52,8 @@ def dettaglio_ricetta(conn, prodotto_id):
     ).fetchone()
     righe = [
         dict(r) for r in conn.execute(
-            "SELECT rr.ingrediente_id, rr.quantita, p.nome, p.unita_misura AS um, "
+            "SELECT rr.ingrediente_id, rr.quantita, rr.um_scritta, p.nome, "
+            "p.unita_misura AS um, p.densita, "
             "fr.nome AS famiglia_ingrediente "
             "FROM ricette_righe rr "
             "JOIN prodotti p ON p.id = rr.ingrediente_id "
@@ -59,6 +63,18 @@ def dettaglio_ricetta(conn, prodotto_id):
             (ricetta["id"],),
         ).fetchall()
     ]
+    # RIFIN 51: la riga viaggia con la dose COME L'HAI SCRITTA ('500 g'):
+    # quantita resta canonica (0,485 lt), dose_qta/dose_um è il laboratorio
+    for r in righe:
+        if r["um_scritta"]:
+            f = um.fattore(r["um"], r["um_scritta"]) or um.fattore_liquido(
+                r["um"], r["um_scritta"], r["densita"]
+            ) or 1.0
+            r["dose_qta"] = r["quantita"] * f
+            r["dose_um"] = r["um_scritta"]
+        else:
+            r["dose_qta"] = r["quantita"]
+            r["dose_um"] = r["um"]
     return {
         "prodotto": dict(prodotto),
         "famiglia_id": ricetta["famiglia_id"],
@@ -81,21 +97,40 @@ def crea_prodotto_lab(conn, dati):
     um = (dati.get("unita_misura") or "").strip() or None
     if not nome:
         raise ErroreRicetta("Il nome del prodotto è obbligatorio")
-    gia = conn.execute(
-        "SELECT id FROM prodotti WHERE LOWER(nome) = LOWER(?)", (nome,)
-    ).fetchone()
-    if gia:
-        raise ErroreRicetta(f"'{nome}' esiste già in anagrafica")
     conservazione = (dati.get("conservazione") or "").strip() or None
     if conservazione and conservazione not in ("Frigo", "Freezer", "Magazzino"):
         raise ErroreRicetta("Conservazione: Frigo, Freezer o Magazzino")
-    cur = conn.execute(
-        "INSERT INTO prodotti (nome, famiglia_id, conservazione, unita_misura, sigla) "
-        "VALUES (?, NULL, ?, ?, ?)",
-        (nome, conservazione, um, (dati.get("sigla") or "").strip().upper() or None),
-    )
+    gia = conn.execute(
+        "SELECT * FROM prodotti WHERE LOWER(nome) = LOWER(?)", (nome,)
+    ).fetchone()
+    if gia and not _fantasma(conn, gia):
+        # nome già preso da un'anagrafica VERA: il messaggio dice COS'È e
+        # DOVE guardarla (prima diceva solo "esiste già" e sembrava un
+        # fantasma introvabile: il caso "Torta al cioccolato")
+        ingrediente = _tipo(conn, gia) == "ingrediente"
+        cosa = "un ingrediente acquistato" if ingrediente else "un prodotto di laboratorio"
+        dove = "card Ingredienti" if ingrediente else "card Prodotti"
+        raise ErroreRicetta(
+            f"'{nome}' esiste già: è {cosa} ({dove} di Anagrafiche)")
+    sigla = (dati.get("sigla") or "").strip().upper() or None
+    if gia:
+        # RIFIN 45: nome di un CANDIDATO abbandonato (➕ senza ricetta,
+        # zero storia): lo si COMPLETA riusando la stessa riga. Un nome
+        # non resta mai intrappolato da un esperimento finito male
+        pid = gia["id"]
+        conn.execute(
+            "UPDATE prodotti SET nome = ?, sigla = ?, conservazione = ?, "
+            "unita_misura = ? WHERE id = ?",
+            (nome, sigla, conservazione, um, pid),
+        )
+    else:
+        pid = conn.execute(
+            "INSERT INTO prodotti (nome, famiglia_id, conservazione, unita_misura, sigla) "
+            "VALUES (?, NULL, ?, ?, ?)",
+            (nome, conservazione, um, sigla),
+        ).lastrowid
     return {
-        "id": cur.lastrowid, "nome": nome, "sigla": (dati.get("sigla") or "").strip().upper() or None,
+        "id": pid, "nome": nome, "sigla": sigla,
         "unita_misura": um, "famiglia": None, "conservazione": conservazione,
     }
 
@@ -126,6 +161,26 @@ def _risolvi_famiglia(conn, dati):
     )
 
 
+def _um_dalla_resa(conn, resa):
+    """RIFIN 50: la resa della ricetta ('5 kg', '12 teglie', '60 pz')
+    NOMINA l'u.m. canonica del prodotto, come la famiglia la nomina la
+    ricetta: il master scrive l'anagrafica. Solo un nome GIÀ presente
+    nell'anagrafica u.m. ( regained: così la tendina di Produzioni
+    propone il parco noto e i ➕ creano i nuovi); resa muta o u.m. ignota
+    -> None: il prodotto resta esattamente com'era."""
+    testo = (resa or "").strip().replace(",", ".")
+    if not testo:
+        return None
+    m = re.match(r"^\d+(?:\.\d+)?\s*([A-Za-zÀ-ÿ]+)", testo)
+    if not m:
+        return None
+    riga = conn.execute(
+        "SELECT nome FROM unita_misura WHERE nome = ? COLLATE NOCASE",
+        (m.group(1),),
+    ).fetchone()
+    return riga["nome"] if riga else None
+
+
 def salva_ricetta(conn, dati):
     """Crea o aggiorna la ricetta di un prodotto (upsert: UNIQUE prodotto_id).
 
@@ -153,9 +208,11 @@ def salva_ricetta(conn, dati):
     if not righe_in:
         raise ErroreRicetta("Una ricetta senza ingredienti non è una ricetta")
     visti = set()
+    righe_ok = []
     for r in righe_in:
         ing = conn.execute(
-            "SELECT id, nome FROM prodotti WHERE id = ?", (r.get("ingrediente_id"),)
+            "SELECT id, nome, unita_misura, densita FROM prodotti WHERE id = ?",
+            (r.get("ingrediente_id"),),
         ).fetchone()
         if not ing:
             raise ErroreRicetta("Ingrediente inesistente in una riga della ricetta")
@@ -172,6 +229,34 @@ def salva_ricetta(conn, dati):
                 f'"{ing["nome"]}" compare due volte: unisci le quantità in una riga'
             )
         visti.add(ing["id"])
+        # RIFIN 51: la dose si può scrivere nell'u.m. che usa il laboratorio
+        # ('500' + 'g'): il fattore è quello di um.py (g<->kg, ml<->lt) OPPURE
+        # il ponte peso<->volume, ma SOLO se la scheda dell'ingrediente ha la
+        # densità (g/ml). Il verbale e i lotti restano SEMPRE in canonica.
+        um_scritta = (r.get("um") or "").strip() or None
+        if um_scritta and um_scritta != ing["unita_misura"]:
+            f = um.fattore(um_scritta, ing["unita_misura"])
+            if f is None:
+                f = um.fattore_liquido(
+                    um_scritta, ing["unita_misura"], ing["densita"]
+                )
+            if f is None:
+                raise ErroreRicetta(
+                    f'"{ing["nome"]}" non ammette la u.m. "{um_scritta}" '
+                    f"(canonica '{ing['unita_misura']}'): serve la stessa u.m., "
+                    "il suo fratello (g/kg, ml/lt) oppure una densità dichiarata "
+                    "nella sua scheda in Anagrafiche"
+                )
+            qta = qta * f   # in u.m. CANONICA
+            righe_ok.append({
+                "ingrediente_id": ing["id"], "quantita": qta,
+                "um_scritta": um_scritta,
+            })
+        else:
+            righe_ok.append({
+                "ingrediente_id": ing["id"], "quantita": qta,
+                "um_scritta": None,
+            })
 
     famiglia_id = _risolvi_famiglia(conn, dati)
 
@@ -195,17 +280,28 @@ def salva_ricetta(conn, dati):
              (dati.get("procedimento") or "").strip() or None),
         )
         ricetta_id = cur.lastrowid
-    for r in righe_in:
+    for r in righe_ok:
         conn.execute(
-            "INSERT INTO ricette_righe (ricetta_id, ingrediente_id, quantita) "
-            "VALUES (?, ?, ?)",
-            (ricetta_id, r["ingrediente_id"], float(r["quantita"])),
+            "INSERT INTO ricette_righe (ricetta_id, ingrediente_id, quantita, "
+            "um_scritta) VALUES (?, ?, ?, ?)",
+            (ricetta_id, r["ingrediente_id"], float(r["quantita"]),
+             r["um_scritta"]),
         )
     # La famiglia NASCE nella ricetta e l'anagrafica del prodotto la rispecchia
     # (così combo e filtri, che leggono l'anagrafica, la vedono subito).
     conn.execute(
         "UPDATE prodotti SET famiglia_id = ? WHERE id = ?", (famiglia_id, prodotto_id)
     )
+    # RIFIN 50: come la famiglia, anche l'U.M. CANONICA nasce dalla ricetta:
+    # la resa la nomina ('5 kg' -> kg). È un SUGGERIMENTO che l'utente può
+    # sempre cambiare (anagrafica / produzione: tendina con tutto il parco
+    # e ➕ crea); toccata SOLO quando la resa nomina un'u.m. dell'anagrafica.
+    um_resa = _um_dalla_resa(conn, dati.get("resa"))
+    if um_resa:
+        conn.execute(
+            "UPDATE prodotti SET unita_misura = ? WHERE id = ?",
+            (um_resa, prodotto_id),
+        )
     return dettaglio_ricetta(conn, prodotto_id)
 
 

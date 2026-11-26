@@ -21,8 +21,8 @@ def conn():
     c.execute("INSERT INTO famiglie (id, nome) VALUES (2, 'Dolci finiti')")
     # ingredienti acquistati (famiglia_id NULL)
     c.execute(
-        "INSERT INTO prodotti (id, nome, famiglia_id, marca, unita_misura) "
-        "VALUES (1, 'Latte intero', NULL, 'Mucca', 'lt')"
+        "INSERT INTO prodotti (id, nome, famiglia_id, marca, unita_misura, densita) "
+        "VALUES (1, 'Latte intero', NULL, 'Mucca', 'lt', 1.03)"
     )
     c.execute(
         "INSERT INTO prodotti (id, nome, famiglia_id, marca, unita_misura) "
@@ -130,6 +130,51 @@ def test_proposta_rifiuta_prodotto_senza_ricetta(conn):
     conn.commit()
     with pytest.raises(ErroreProduzione, match="ricetta"):
         proponi_produzione(conn, 9, oggi=OGGI)
+
+
+def test_proposta_candidato_da_plus_indica_la_ricetta_mancante(conn):
+    """RIFIN 49: un prodotto nato dal ➕ del form produzioni (niente famiglia,
+    niente conservazione, niente arrivi) NON è un 'ingrediente acquistato':
+    gli va detto che manca la RICETTA, perché è quel messaggio che fa
+    comparire nella UI il pulsante '➕ Crea la ricetta di X ora'."""
+    c = conn.execute(
+        "INSERT INTO prodotti (id, nome, sigla) VALUES (5, 'Torta al cioccolato', 'TRC')"
+    )
+    conn.commit()
+    with pytest.raises(ErroreProduzione, match="non ha ancora una ricetta"):
+        proponi_produzione(conn, 5, oggi=OGGI)
+
+
+def test_proposta_ingrediente_vero_resti_non_producibile(conn):
+    """RIFIN 49: un VERO ingrediente acquistato (conservazione impostata,
+    mai una ricetta) resta fermo al suo messaggio: non si produce."""
+    c = conn.execute(
+        "INSERT INTO prodotti (id, nome, conservazione, unita_misura) "
+        "VALUES (6, 'Chunk Cioccolato', 'Frigo', 'kg')"
+    )
+    conn.commit()
+    with pytest.raises(ErroreProduzione, match="ingrediente acquistato"):
+        proponi_produzione(conn, 6, oggi=OGGI)
+
+
+def test_proposta_porta_um_scritta_e_densita(conn):
+    """RIFIN 51: la riga della ricetta viaggia COME L'HAI SCRITTA ('2000 g'
+    di latte, in banca dati 1,941... lt canonici) e con la DENSITÀ: il form
+    Produzioni mostra la bilancia, il verbale e la FEFO scaricano in lt."""
+    qta_canonica = 2000 / 1.03 / 1000
+    conn.execute(
+        "UPDATE ricette_righe SET quantita = ?, um_scritta = 'g' "
+        "WHERE ricetta_id = 10 AND ingrediente_id = 1",
+        (qta_canonica,),
+    )
+    conn.commit()
+    prop = proponi_produzione(conn, 3, oggi=OGGI)
+    riga = prop["righe"][0]
+    assert riga["um_scritta"] == "g"
+    assert abs(riga["densita"] - 1.03) < 1e-9
+    assert abs(riga["qta_ricetta"] - qta_canonica) < 1e-9
+    # la FEFO copre coi lotti LAT-A/B in CANONICA: il ponte non la tocca
+    assert riga["mancante"] == 0
 
 
 # ---- registra_produzione ----
@@ -393,3 +438,89 @@ def test_lotto_in_um_diversa_non_e_proposto_dalla_fefo(conn):
     lotti = lotti_disponibili(conn, 3, oggi=OGGI)
     assert [l["id"] for l in lotti] == [lotto["id"]]
     assert vassoi["um_prodotta"] == "vassoi"
+
+
+def _produci(conn, qta_crema=1.0, data="2026-11-13"):
+    return registra_produzione(conn, {
+        "prodotto_id": 3, "data_produzione": data, "data_scadenza": "2026-11-16",
+        "qta_prodotta": qta_crema,
+        "consumi": [{"origine": "ingresso", "lotto_origine_id": 100,
+                     "quantita_usata": qta_crema}],
+    })
+
+
+def _bigne_su_crema(conn, lotto_crema, qta, data="2026-11-15"):
+    return registra_produzione(conn, {
+        "prodotto_id": 4, "data_produzione": data, "data_scadenza": "2026-11-20",
+        "qta_prodotta": 20,
+        "consumi": [{"origine": "interno", "lotto_origine_id": lotto_crema,
+                     "quantita_usata": qta}],
+    })
+
+
+def test_ricreare_dopo_annullamento_non_scontra_i_codici(conn):
+    # RIFIN 54 (audit "produzioni fantasma"): produce, annulla la PRIMA,
+    # ricrea: il codice lotto avanza col MAX, il vecchio conteggio
+    # riproponeva la -02 ancora viva e il salvataggio saltava (UNIQUE)
+    a = _produci(conn, 0.3)
+    b = _produci(conn, 0.3)
+    assert (a["codice_lotto"], b["codice_lotto"]) == \
+        ("CRP-20261113-01", "CRP-20261113-02")
+    elimina_produzione(conn, a["id"])
+    c = _produci(conn, 0.3)
+    assert c["codice_lotto"] == "CRP-20261113-03"
+    residua = conn.execute(
+        "SELECT quantita_residua FROM lotti_ingresso WHERE id = 100").fetchone()
+    # il latte restituito dall'annullamento è tornato nel lotto: restano
+    # solo i 0,6 realmente consumati (b e c: la "a" annullata è rientrata)
+    assert abs(residua["quantita_residua"] - (1.5 - 0.6)) < 1e-9
+
+
+def test_semilavorato_non_si_sovraconsuma(conn):
+    # RIFIN 54: dal lotto interno si prende solo la RESIDUA (prodotta meno
+    # ciò che le altre produzioni ne hanno già prelevato): dal chilo di
+    # crema non possono uscire 1,4 kg di bignè
+    crema = _produci(conn, 1.0)
+    _bigne_su_crema(conn, crema["id"], 0.7)
+    with pytest.raises(ErroreProduzione, match="Giacenza insufficiente"):
+        _bigne_su_crema(conn, crema["id"], 0.7)
+
+
+def test_fefo_propone_solo_la_residua_del_semilavorato(conn):
+    crema = _produci(conn, 1.0)
+    _bigne_su_crema(conn, crema["id"], 0.7)
+    lotti = lotti_disponibili(conn, 3, "2026-11-14")
+    restano = [l for l in lotti if l["id"] == crema["id"]]
+    assert restano and abs(restano[0]["quantita_residua"] - 0.3) < 1e-9
+    # consumata tutta: il lotto sparisce dalle disponibilità
+    _bigne_su_crema(conn, crema["id"], 0.3, data="2026-11-16")
+    assert not [l for l in lotti_disponibili(conn, 3, "2026-11-16")
+                if l["id"] == crema["id"]]
+
+
+def test_annulla_produzione_restituisce_il_semilavorato(conn):
+    # annullare il bignè rimette la crema nel lotto: i consumi se ne vanno
+    crema = _produci(conn, 1.0)
+    b = _bigne_su_crema(conn, crema["id"], 0.7)
+    elimina_produzione(conn, b["id"])
+    lotti = lotti_disponibili(conn, 3, "2026-11-14")
+    restano = [l for l in lotti if l["id"] == crema["id"]]
+    assert restano and abs(restano[0]["quantita_residua"] - 1.0) < 1e-9
+
+
+def test_annulla_su_lotto_azzerato_va_nel_mucchio(conn):
+    # RIFIN 54: il restauro di un'annullazione su un lotto AZZERATO a mano
+    # non riapre il lotto chiuso: la merce finisce nella pila (foto),
+    # pronta per il RIPRISTINO se anche l'azzeramento era uno sbaglio
+    from app.logic.arrivi import azzera_lotto
+    crema = _produci(conn, 0.5)   # consuma 0.5 dal latte LAT-A
+    azzera_lotto(conn, 100, "2026-11-13")
+    elimina_produzione(conn, crema["id"])
+    stato = conn.execute(
+        "SELECT quantita_residua, data_esaurimento, residua_pre_azzeramento "
+        "FROM lotti_ingresso WHERE id = 100").fetchone()
+    # prima dell'azzeramento erano rimasti 1,0: foto 1,0 + i 0,5 che il
+    # verbale annullato restituisce; il lotto resta chiuso (residua 0)
+    assert abs(stato["residua_pre_azzeramento"] - 1.5) < 1e-9
+    assert stato["quantita_residua"] == 0
+    assert stato["data_esaurimento"] == "2026-11-13"

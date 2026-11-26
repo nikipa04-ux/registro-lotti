@@ -385,6 +385,12 @@ creaCombo({
   onCrea: async (nome) => {
     $("qc-prod").hidden = false;
     $("qc-prod-nome").value = nome;
+    // RIFIN 53: anche la creazione rapida suggerisce la densità dal nome,
+    // con lo stesso hint della modale grande (poi il testo resta tuo)
+    $("qc-densita").value = "";
+    QC_DENS_AUTO = true;
+    $("qc-densita-hint").textContent = "Con la densità puoi scrivere i grammi anche su un liquido in litri. Se lasci il campo vuoto, la prende da sola dalla tabella Densità tipiche.";
+    suggerisciDensitaQc();
     // gli allergeni si scelgono subito: se serve, l'elenco si carica ora
     if (!ANAG_ALLERGENI.length) { try { await caricaAllergeni(); } catch (e) { /* chips vuote */ } }
     // RIFIN 43: anche l'u.m. viene dall'anagrafica, con tendina ➕ come in
@@ -481,6 +487,7 @@ async function creaIngredienteRapido() {
         sigla: $("qc-sigla").value.trim() || null,
         marca: $("qc-marca").value.trim() || null,
         denominazione_legale: $("qc-denom").value.trim() || null,
+        densita: $("qc-densita").value === "" ? null : Number($("qc-densita").value),
         allergeni: [...QC_ALLERGENI],
       }),
     });
@@ -495,8 +502,11 @@ async function creaIngredienteRapido() {
     $("na-um").textContent = corpo.unita_misura ? "(" + corpo.unita_misura + ")" : "";
     if (!$("na-marca").value && corpo.marca) $("na-marca").value = corpo.marca;
     $("qc-prod").hidden = true;
+    $("qc-densita").value = "";          // RIFIN 53: reset per la prossima creazione
+    QC_DENS_AUTO = true;
     QC_ALLERGENI = new Set();
-    flashArrivi('Ingrediente "' + corpo.nome + '" creato in anagrafica.');
+    flashArrivi('Ingrediente "' + corpo.nome + '" creato in anagrafica' +
+      (corpo.densita ? " (densità " + corpo.densita + " g/ml)" : "") + ".");
   } catch (e) {
     mostraErroreForm("Il server non risponde.");
   }
@@ -1257,7 +1267,22 @@ function apriFormProduzione() {
   $("np-prodotto").focus();
 }
 
-function chiudiFormProduzione() { $("overlay-produzione").hidden = true; }
+// RIFIN 48: candidato nato dal ➕ DEL FORM PRODUZIONE, questa sessione.
+// Dedicata (non NUOVO_CANDIDATO_ID): aprire e annullare la modale ricetta
+// nel mezzo (l'offerta della proposta: "non ha ancora ricetta, creala")
+// NON deve farlo perdere: l'utente è ancora DENTRO il flusso produzione.
+// Si eliminano SOLO le estranee: niente più all'annullare della produzione,
+// e alla RICETTA SALVATA lo fa sparire lui (è diventato vero)
+let CANDIDATO_DA_PRODUZIONE = null;
+
+function chiudiFormProduzione() {
+  $("overlay-produzione").hidden = true;
+  // RIFIN 48: abbandonato il form produzione senza avergli dato la
+  // ricetta: il candidato appena nato (zero storia) se ne va, il nome
+  // resta libero. Se la ricetta l'aveva salvata, la variabile è nulla
+  eliminaCandidatoAbbandonato(CANDIDATO_DA_PRODUZIONE);
+  CANDIDATO_DA_PRODUZIONE = null;
+}
 
 $("btn-nuova-produzione").addEventListener("click", apriFormProduzione);
 $("btn-nuova-produzione-dash").addEventListener("click", () => { mostraSezione("produzioni"); apriFormProduzione(); });
@@ -1376,13 +1401,20 @@ $("qc-npprod-crea").addEventListener("click", async () => {
     const corpo = await risposta.json();
     if (!risposta.ok) return mostraErroreProduzione(typeof corpo.detail === "string" ? corpo.detail : "Creazione rifiutata.");
     PRODOTTI_LAB.push(corpo);
+    // RIFIN 48: appena nato SENZA ricetta: se questo form si abbandona
+    // prima di completarlo, lui se ne va con l'annulla del form
+    CANDIDATO_DA_PRODUZIONE = corpo.id;
     $("qc-npprod").hidden = true;
     $("np-prodotto-id").value = String(corpo.id);
     $("np-prodotto").value = corpo.nome;
     $("np-um").textContent = corpo.unita_misura ? "(" + corpo.unita_misura + ")" : "";
     popolaUmQta(corpo.unita_misura);
-    // il prodotto esiste ma senza ricetta: la proposta lo dirà e offrirà il ➕
+    // RIFIN 49: lo hai creato per PRODURLO, e senza ricetta non si produce:
+    // la modale ricetta si apre SUBITO sopra il form. Al salvataggio il
+    // flusso torna qui con la proposta FEFO già pronta; se invece la
+    // annulli, dietro resta la proposta col suo "➕ Crea la ricetta di X ora"
     caricaProposta(corpo.id);
+    apriRicettaDaProduzione(corpo.id);
   } catch (e) {
     mostraErroreProduzione("Il server non risponde.");
   }
@@ -1427,17 +1459,43 @@ function fattoreUm(da, a) {
   return PESO_UM[da] / PESO_UM[a];
 }
 
+/* RIFIN 51: il ponte PESO<->VOLUME, ammesso SOLO con la densità (g/ml)
+   dichiarata nella scheda dell'ingrediente: 500 g di latte (1,03) sono
+   0,485 lt. Senza densità il divieto resta: 500 g di latte e 500 g di
+   olio NON sono lo stesso volume. Vale lo stesso qui e in um.py. */
+function fattoreLiquido(da, a, densita) {
+  if (da === a) return 1;
+  if (!densita || !GRUPPO_UM[da] || !GRUPPO_UM[a] ||
+      GRUPPO_UM[da] === GRUPPO_UM[a]) return null;
+  return GRUPPO_UM[da] === "massa"
+    ? PESO_UM[da] / densita / PESO_UM[a]
+    : PESO_UM[da] * densita / PESO_UM[a];
+}
+
+function fattoreRiga(da, a, densita) {
+  return fattoreUm(da, a) != null ? fattoreUm(da, a) : fattoreLiquido(da, a, densita);
+}
+
 function num3(x) {
   // il numero riconvertito non trascina dietro decinali fantasma
   const v = Math.round(x * 1000) / 1000;
   return v ? String(Number(v.toFixed(3))) : "";
 }
 
-function opzioniUm(um, scelta) {
-  const fratello = FRATELLO_UM[um];
-  if (!fratello) return "";   // u.m. libera: nessuna conversione ammessa
-  return '<option value="' + um + '"' + (scelta === um ? " selected" : "") + ">" + um + "</option>" +
-    '<option value="' + fratello + '"' + (scelta === fratello ? " selected" : "") + ">" + fratello + "</option>";
+function opzioniUm(um, scelta, densita) {
+  if (!um) return "";   // niente u.m.: niente tendina
+  let lista = [um];
+  if (FRATELLO_UM[um]) lista.push(FRATELLO_UM[um]);
+  // RIFIN 51: con la densità dichiarata in scheda, il ponte peso<->volume
+  // apre anche il gruppo dell'altro tipo (g/kg su un liquido, ml/lt sul resto)
+  if (densita && GRUPPO_UM[um]) {
+    const altre = GRUPPO_UM[um] === "massa" ? ["ml", "lt"] : ["g", "kg"];
+    lista = lista.concat(altre.filter(x => !lista.includes(x)));
+  }
+  if (lista.length < 2) return "";   // u.m. libera: nessuna conversione ammessa
+  return lista.map(u =>
+    '<option value="' + u + '"' + (scelta === u ? " selected" : "") + ">" + u + "</option>"
+  ).join("");
 }
 
 // pool della tendina u.m. "quantità prodotta" (RIFIN 35): prima le 4 di
@@ -1466,8 +1524,8 @@ function idUmInPool(nome) {
 }
 
 function selUmRiga(i, riga) {
-  // nella riga: select quando esiste il fratello, badge grigia se no
-  const opzioni = opzioniUm(riga.um, riga.umSel);
+  // nella riga: select quando ci sono alternative, badge grigia se no
+  const opzioni = opzioniUm(riga.um, riga.umSel, riga.densita);
   return opzioni
     ? '<select data-rum="' + i + '" class="rum-sel" title="Cambia u.m. della riga: il numero si riconverte da solo, il verbale resta in u.m. canonica">' + opzioni + "</select>"
     : '<span class="badge b-gray">' + esc(riga.um || "") + "</span>";
@@ -1476,7 +1534,7 @@ function selUmRiga(i, riga) {
 function qtaVista(riga) {
   // il numero mostrato è nella u.m. SCELTA, riga.qta resta sempre canonica
   if (!riga.qta || !riga.umSel || riga.umSel === riga.um) return riga.qta || "";
-  return num3(riga.qta * fattoreUm(riga.um, riga.umSel));
+  return num3(riga.qta * (fattoreRiga(riga.um, riga.umSel, riga.densita) || 1));
 }
 
 // La FEFO è la PROPOSTA; l'assegnazione A MANO è l'eccezione scelta
@@ -1593,8 +1651,9 @@ function renderRighe() {
     inp.addEventListener("input", () => {
       const r = RIGHE[Number(inp.dataset.qta)];
       // il numero digitato è nella u.m. SCELTA: il verbale (chips, FEFO,
-      // scarico) lavora sempre in u.m. CANONICA
-      const f = r.umSel && r.umSel !== r.um ? fattoreUm(r.umSel, r.um) || 1 : 1;
+      // scarico) lavora sempre in u.m. CANONICA. RIFIN 51: con la densità
+      // la scelta può anche attraversare peso<->volume (500 g -> 0,485 lt)
+      const f = r.umSel && r.umSel !== r.um ? fattoreRiga(r.umSel, r.um, r.densita) || 1 : 1;
       r.qta = (Number(inp.value) || 0) * f;
       const chips = cont.querySelector('[data-chips="' + inp.dataset.qta + '"]');
       if (chips) chips.innerHTML = chipsDi(r);
@@ -1623,6 +1682,7 @@ function renderRighe() {
       RIGHE[i].nome = p.nome;
       RIGHE[i].um = p.unita_misura;
       RIGHE[i].umSel = p.unita_misura || "";   // la u.m. scelta riparte dall'anagrafica
+      RIGHE[i].densita = p.densita || null;    // RIFIN 51: ponte peso<->volume
       RIGHE[i].ingrediente_id = p.id;   // serve al pannello ⚖ (registra lotto al volo)
       RIGHE[i].assegnazioni = null;   // lotti nuovi: si riparte dalla FEFO
       PANNELLO_ASSEGNA = null;
@@ -1916,7 +1976,10 @@ async function caricaProposta(prodotto_id) {
       return;
     }
     PROPOSTA = dati;
-    RIGHE = dati.righe.map(r => ({ ...r, qta: r.qta_ricetta, attiva: true, fonte: "ricetta", umSel: r.um || null }));
+    // RIFIN 51: la riga parte COME L'HAI SCRITTA in ricetta ('500 g' su un
+    // ingrediente in lt): l'operatore vede la bilancia, lo scarico resta in
+    // canonica. densita apre il ponte peso<->volume nella tendina
+    RIGHE = dati.righe.map(r => ({ ...r, qta: r.qta_ricetta, attiva: true, fonte: "ricetta", umSel: r.um_scritta || r.um || null }));
     PANNELLO_ASSEGNA = null;
     // Prezzo di default della quantità prodotta: la resa della ricetta
     const resa = parseFloat((dati.ricetta.resa || "").replace(",", "."));
@@ -2034,6 +2097,11 @@ function flashProduzioni(testo) {
 let FAMIGLIE = [];
 let RIGHE_R = [];     // righe della ricetta in editing
 let RICETTA_IN_EDIT = null;   // prodotto_id quando si modifica, null se nuova
+// RIFIN 45: prodotto appena nato dal ➕ (con ricetta ancora da salvare).
+// Se il form si CHIUDE senza salvare, il candidato (che non ha storia:
+// niente ricetta, arrivi, produzioni) viene eliminato: il nome non resta
+// mai intrappolato da una creazione abbandonata a metà
+let NUOVO_CANDIDATO_ID = null;
 
 async function avviaRicette() {
   try {
@@ -2175,6 +2243,10 @@ function apriFormRicetta(dati) {
   $("nr-errore").hidden = true;
   $("qc-rprod").hidden = true;
   $("qc-fam").hidden = true;
+  // RIFIN 45: il form si apre su un prodotto GIÀ noto: nessun candidato
+  // in attesa da eliminare (chi crea un prodotto nuovo lo dichiara
+  // DOPO questa chiamata, riassegnando la variabile)
+  NUOVO_CANDIDATO_ID = null;
   $("nr-procedimento").value = "";
   $("nr-resa-qta").value = "";
   $("nr-resa-um").value = "";
@@ -2193,7 +2265,9 @@ function apriFormRicetta(dati) {
     $("nr-procedimento").value = dati.procedimento || "";
     RIGHE_R = dati.righe.map(r => ({
       ingrediente_id: r.ingrediente_id, nome: r.nome,
-      um: r.um, qta: r.quantita,
+      um: r.um, umSel: r.um_scritta || r.um,   // RIFIN 51: come l'avevi scritta
+      densita: r.densita || null,
+      qta: r.quantita,
     }));
     $("nr-hint").hidden = true;
   } else {
@@ -2214,10 +2288,25 @@ function chiudiFormRicetta() {
   $("overlay-ricetta").hidden = true;
   RICETTA_DA_PRODUZIONE = null;    // annullata: il form produzione resta aperto sotto
   RICETTA_DA_ANAGRAFICA = null;    // annullata: la scheda anagrafica resta aperta sotto
+  // RIFIN 45: chiuso senza salvare SUBITO DOPO un ➕: il candidato non ha
+  // ricetta né storia, lo si elimina (best effort: se il browser muore,
+  // penserà il backend al prossimo tentativo, riusando la riga)
+  eliminaCandidatoAbbandonato(NUOVO_CANDIDATO_ID);
+  NUOVO_CANDIDATO_ID = null;
+}
+
+// l'eliminazione BEST EFFORT del candidato rimasto a metà (RIFIN 45/48):
+// stessa cura in chiudiFormRicetta e chiudiFormProduzione
+function eliminaCandidatoAbbandonato(id) {
+  if (id === null || id === undefined) return;
+  PRODOTTI_LAB = PRODOTTI_LAB.filter(p => p.id !== id);
+  fetch("/api/anagrafiche/prodotti/" + id, { method: "DELETE" })
+    .then(() => { sezioniCaricate.anagrafiche = false; })
+    .catch(() => { /* offline: la riga vuota non dà fastidio */ });
 }
 
 function aggiungiRigaR() {
-  RIGHE_R.push({ ingrediente_id: null, nome: null, um: "", qta: 0 });
+  RIGHE_R.push({ ingrediente_id: null, nome: null, um: "", umSel: null, densita: null, qta: 0 });
   renderRigheRicette();
 }
 
@@ -2240,11 +2329,10 @@ function renderRigheRicette() {
       opzioni("Prodotti di laboratorio", PRODOTTI_LAB) + "</select>";
     html += '<div class="riga aggiunta"><div class="riga-testa">' +
       (r.ingrediente_id
-        ? "<b>" + esc(r.nome) + "</b> <span class='badge b-gray'>" + esc(r.um || "") + "</span>"
+        ? "<b>" + esc(r.nome) + "</b> " + selUmRiga(i, r)
         : sel) +
-      '<input type="number" step="0.001" min="0" value="' + (r.qta || "") +
+      '<input type="number" step="0.001" min="0" value="' + qtaVista(r) +
       '" data-rqta="' + i + '" class="qta-input" placeholder="q.tà">' +
-      '<span class="muted">' + esc(r.um || "") + "</span>" +
       '<button class="btn sec mini rosso" data-rdel="' + i + '" title="Rimuovi riga">✕</button>' +
       "</div></div>";
   });
@@ -2258,11 +2346,25 @@ function renderRigheRicette() {
       RIGHE_R[i].ingrediente_id = p.id;
       RIGHE_R[i].nome = p.nome;
       RIGHE_R[i].um = p.unita_misura || "";
+      RIGHE_R[i].umSel = p.unita_misura || "";   // RIFIN 51: riparte dall'anagrafica
+      RIGHE_R[i].densita = p.densita || null;     // ponte peso<->volume se c'è
       renderRigheRicette();
     }));
   cont.querySelectorAll("[data-rqta]").forEach(inp =>
     inp.addEventListener("input", () => {
-      RIGHE_R[Number(inp.dataset.rqta)].qta = Number(inp.value) || 0;
+      const r = RIGHE_R[Number(inp.dataset.rqta)];
+      // il numero digitato è nella u.m. SCELTA, r.qta resta SEMPRE canonica:
+      // la salva il backend, che converte di nuovo come qui (um.py)
+      const f = r.umSel && r.umSel !== r.um ? fattoreRiga(r.umSel, r.um, r.densita) || 1 : 1;
+      r.qta = (Number(inp.value) || 0) * f;
+    }));
+  cont.querySelectorAll("[data-rum]").forEach(sel =>
+    sel.addEventListener("change", () => {
+      const r = RIGHE_R[Number(sel.dataset.rum)];
+      r.umSel = sel.value;
+      // il numero si riconverte alla nuova u.m., r.qta non cambia affatto
+      const inp = cont.querySelector('[data-rqta="' + sel.dataset.rum + '"]');
+      if (inp) inp.value = qtaVista(r);
     }));
   cont.querySelectorAll("[data-rdel]").forEach(btn =>
     btn.addEventListener("click", () => {
@@ -2298,7 +2400,12 @@ async function salvaRicetta() {
         famiglia_nuova: null,
         resa: unisciResa($("nr-resa-qta").value, $("nr-resa-um").value),
         procedimento: $("nr-procedimento").value.trim() || null,
-        righe: righe.map(r => ({ ingrediente_id: r.ingrediente_id, quantita: r.qta })),
+        righe: righe.map(r => ({
+          ingrediente_id: r.ingrediente_id, quantita: r.qta,
+          // RIFIN 51: come l'hai scritta ('500' + 'g'): il backend converte
+          // e la conserva, il laboratorio la ritrova nel libro ricette
+          um: r.umSel && r.umSel !== r.um ? r.umSel : null,
+        })),
       }),
     });
     const corpo = await risposta.json();
@@ -2307,6 +2414,11 @@ async function salvaRicetta() {
         ? corpo.detail : "Il server ha rifiutato la ricetta.");
       return;
     }
+    // RIFIN 45: ricetta salvata = il prodotto è VERO: nessun candidato
+    // in attesa da ripulire alla chiusura (che sia nato da un form
+    // ricetta, RIFIN 45, o dal ➕ del form produzione, RIFIN 48)
+    NUOVO_CANDIDATO_ID = null;
+    CANDIDATO_DA_PRODUZIONE = null;
     if (RICETTA_DA_ANAGRAFICA) {
       // la ricetta nasce dalla scheda anagrafica: si torna lì, aggiornata
       const pid = RICETTA_DA_ANAGRAFICA;
@@ -2334,6 +2446,13 @@ async function salvaRicetta() {
         sigla: corpo.prodotto.sigla, unita_misura: corpo.prodotto.unita_misura,
         famiglia: corpo.famiglia,
       });
+      // RIFIN 50: la resa ha appena (ri)scritto l'U.M. CANONICA del
+      // prodotto ('5 kg' -> kg): la tendina u.m. della quantità prodotta
+      // diventa visibile, SUGGERITA col valore della resa e liberamente
+      // cambiabile (parco dell'anagrafica + ➕ Crea)
+      $("np-um").textContent = corpo.prodotto.unita_misura
+        ? "(" + corpo.prodotto.unita_misura + ")" : "";
+      popolaUmQta(corpo.prodotto.unita_misura);
       // e le altre sezioni rivedranno il mondo al prossimo passaggio
       sezioniCaricate.produzioni = false;
       sezioniCaricate.arrivi = false;
@@ -2435,6 +2554,9 @@ $("qc-rprod-crea").addEventListener("click", async () => {
     }
     PRODOTTI_LAB.push(corpo);
     $("qc-rprod").hidden = true;
+    // RIFIN 45: appena nato, ancora senza ricetta: se il form si chiude
+    // senza salvare, lui torna via con l'annulla
+    NUOVO_CANDIDATO_ID = corpo.id;
     $("nr-prodotto-id").value = String(corpo.id);
     $("nr-prodotto").value = corpo.nome;
     $("nr-um").textContent = corpo.unita_misura ? "(" + corpo.unita_misura + ")" : "";
@@ -2507,6 +2629,8 @@ let ANAG_FAM_EDIT = null;       // id famiglia in rinomina inline
 let ANAG_ATTIVI = new Set();    // allergeni attivi nella scheda ingrediente
 let NAI_ATTIVI = new Set();     // allergeni attivi nella modale nuovo ingrediente
 let NAI_DENOM_AUTO = true;      // la denominazione segue il nome finché non si edita
+let NAI_DENS_AUTO = true;       // RIFIN 51: la densità suggerita dal nome finché non si edita a mano
+let QC_DENS_AUTO = true;        // RIFIN 53: lo stesso per la creazione rapida (Arrivi)
 let ANAG_DETTAGLIO = null;      // dati della scheda aperta
 let RICETTA_DA_ANAGRAFICA = null;  // prodotto_id: la ricetta nasce dalla scheda
 
@@ -2614,7 +2738,66 @@ async function caricaProdottiAnag() {
   } catch (e) {
     $("tabella-anag-pro").innerHTML = '<div class="loading">Il server non risponde.</div>';
   }
+  caricaCandidatiAnag();
 }
+
+/* ---- RIFIN 47: i CANDIDATI senza ricetta, visibili e gestibili ----
+   Un prodotto nato dal ➕ e mai completato non sparisce nel limbo: la
+   riga in fondo alla card Prodotti lo lista; lo si completa (la ricetta
+   lo fa nascere per davvero) o lo si elimina (protetto: se nel frattempo
+   ha preso storia, il server rifiuta e spiega). */
+let CANDIDATI_ANAG = [];
+
+async function caricaCandidatiAnag() {
+  try {
+    const r = await fetch("/api/anagrafiche/candidati");
+    CANDIDATI_ANAG = r.ok ? await r.json() : [];
+  } catch (e) { CANDIDATI_ANAG = []; }
+  const box = $("anag-candidati");
+  if (!CANDIDATI_ANAG.length) { box.hidden = true; box.innerHTML = ""; return; }
+  box.hidden = false;
+  box.innerHTML =
+    "<b>⏳ " + CANDIDATI_ANAG.length + " in attesa di ricetta</b>" +
+    " (nati dal ➕ e mai completati): completarli li fa nascere per davvero, eliminarli libera il nome." +
+    CANDIDATI_ANAG.map(c =>
+      '<div class="riga"><span>➕ ' + esc(c.nome) + "</span><span>" +
+      '<button class="btn sec mini" data-cand-comp="' + c.id + '" title="Aprigli la ricetta: da candidato diventa prodotto">✏ Completa</button> ' +
+      '<button class="btn sec mini rosso" data-cand-del="' + c.id + '" title="Elimina il candidato (libera il nome)">🗑</button>' +
+      "</span></div>").join("");
+}
+
+$("anag-candidati").addEventListener("click", async (e) => {
+  const comp = e.target.closest("[data-cand-comp]");
+  const del = e.target.closest("[data-cand-del]");
+  if (comp) {
+    const p = CANDIDATI_ANAG.find(x => x.id === Number(comp.dataset.candComp));
+    if (!p) return;
+    // come il ➕ Nuovo della card: apre la modale ricetta sul candidato,
+    // al salvataggio si torna qui (scheda aperta, tutto aggiornato)
+    RICETTA_DA_ANAGRAFICA = p.id;
+    if (!FAMIGLIE.length) { try { await caricaFamiglie(); } catch (e2) { /* si crea a mano */ } }
+    apriFormRicetta({ prodotto: { id: p.id, nome: p.nome, unita_misura: p.unita_misura }, righe: [] });
+    $("nr-titolo").textContent = "Nuova ricetta: " + p.nome;
+    return;
+  }
+  if (del) {
+    const p = CANDIDATI_ANAG.find(x => x.id === Number(del.dataset.candDel));
+    if (!p) return;
+    try {
+      const r = await fetch("/api/anagrafiche/prodotti/" + p.id, { method: "DELETE" });
+      if (r.status === 204) {
+        PRODOTTI_LAB = PRODOTTI_LAB.filter(x => x.id !== p.id);
+        flashAnagrafiche('Candidato "' + p.nome + '" eliminato: nome libero.');
+        caricaCandidatiAnag();
+      } else {
+        const c = await r.json().catch(() => ({}));
+        flashAnagrafiche("❌ " + (typeof c.detail === "string" ? c.detail : "Eliminazione rifiutata."));
+      }
+    } catch (e2) {
+      flashAnagrafiche("❌ Il server non risponde.");
+    }
+  }
+});
 
 async function caricaFornitoriAnag() {
   try {
@@ -2966,6 +3149,8 @@ function renderSchedaIngrediente(d) {
     "<div><label>Marca abituale</label><input id='anag-marca' value='" + esc(d.marca || "") + "' placeholder='default degli arrivi'></div>" +
     "<div><label>Conservazione *</label><select id='anag-cons'>" + selezionaCons(d.conservazione) + "</select></div>" +
     "<div><label>Unità di misura *</label><input id='anag-um' value='" + esc(d.unita_misura || "") + "'></div>" +
+    "<div><label>Densità g/ml (liquidi)</label><input id='anag-densita' type='number' step='0.001' min='0' value='" + (d.densita || "") + "' placeholder='es. 1,03'>" +
+    "<div class='hint'>RIFIN 51: col la densità dichiarata puoi scrivere i grammi anche su un liquido in litri.</div></div>" +
     "<div><label>Sigla (per i lotti in arrivo)</label><input id='anag-sigla' class='mono' value='" + esc(d.sigla || "") + "'></div>" +
     "<div class='full'><label>Note</label><input id='anag-note' value='" + esc(d.note || "") + "'></div>" +
     "<div class='full'><label>Allergeni <span class='muted'>(clic per attivare/disattivare)</span></label>" +
@@ -2987,6 +3172,7 @@ function renderSchedaIngrediente(d) {
       marca: $("anag-marca").value.trim(),
       conservazione: $("anag-cons").value,
       unita_misura: $("anag-um").value.trim(),
+      densita: $("anag-densita").value === "" ? null : Number($("anag-densita").value),
       sigla: $("anag-sigla").value.trim(),
       note: $("anag-note").value.trim(),
       allergeni: [...ANAG_ATTIVI],
@@ -3195,7 +3381,7 @@ $("chiudi-dettaglio-anag").addEventListener("click", () => { $("dettaglio-anagra
 /* ---- le tre modali "+ Nuovo" ---- */
 
 function chiudiOverlay(id) { $(id).hidden = true; }
-["overlay-anag-ing", "overlay-anag-for", "overlay-anag-pro"].forEach(o =>
+["overlay-anag-ing", "overlay-anag-for", "overlay-anag-pro", "overlay-anag-dens"].forEach(o =>
   $(o).addEventListener("click", (e) => { if (e.target === e.currentTarget) chiudiOverlay(o); })
 );
 
@@ -3205,25 +3391,147 @@ document.addEventListener("keydown", (e) => {
   if (!$("overlay-ricetta").hidden) return chiudiFormRicetta();
   if (!$("overlay-produzione").hidden) return chiudiFormProduzione();
   if (!$("overlay-arrivo").hidden) return chiudiFormArrivo();
-  for (const o of ["overlay-anag-pro", "overlay-anag-for", "overlay-anag-ing"])
+  for (const o of ["overlay-anag-pro", "overlay-anag-for", "overlay-anag-ing",
+                   "overlay-anag-dens"])
     if (!$(o).hidden) return chiudiOverlay(o);
 });
 
 $("anag-nuovo-ing").addEventListener("click", () => {
-  ["nai-nome", "nai-denom", "nai-um", "nai-sigla", "nai-marca", "nai-note"].forEach(i => $(i).value = "");
+  ["nai-nome", "nai-denom", "nai-um", "nai-sigla", "nai-marca", "nai-note", "nai-densita"].forEach(i => $(i).value = "");
   $("nai-cons").value = "Frigo";
   NAI_ATTIVI = new Set();
   NAI_DENOM_AUTO = true;
+  NAI_DENS_AUTO = true;
+  $("nai-densita-hint").textContent = "Il ponte peso↔volume: con la densità puoi scrivere i grammi anche su un liquido in litri (500 g di latte = 0,485 lt nello scarico). Trucco da banco: pesa 100 ml, i grammi letti SONO la densità.";
   $("nai-errore").hidden = true;
   renderChipsAllergeni("nai-chips", NAI_ATTIVI, true);
   $("overlay-anag-ing").hidden = false;
   $("nai-nome").focus();
 });
 
+/* RIFIN 51: la densità si SUGGERISCE dal nome (caterva tipica dei liquidi
+   di pasticceria, catalogo in um.py): proposta visibile e modificabile,
+   mai un numero invisibile. Se il campo l'hai già toccato, non si tocca. */
+async function suggerisciDensita() {
+  const nome = $("nai-nome").value.trim();
+  if (!NAI_DENS_AUTO || !nome || $("nai-densita").value) return;
+  try {
+    const r = await fetch("/api/anagrafiche/densita-suggerita?nome=" + encodeURIComponent(nome));
+    const corpo = await r.json();
+    if (corpo.densita) {
+      $("nai-densita").value = corpo.densita;
+      $("nai-densita-hint").textContent = "Suggerita per '" + corpo.parola + "': controllala e correggila se serve (il valore resta tuo).";
+    }
+  } catch (e) { /* offline: il campo resta libero, zero fastidi */ }
+}
+
 $("nai-nome").addEventListener("input", () => {
   if (NAI_DENOM_AUTO) $("nai-denom").value = $("nai-nome").value;  // suggerita dal nome
+  suggerisciDensita();
 });
+
+/* RIFIN 53: la creazione rapida di Arrivi suggerisce la densità dal nome
+   con la stessa regola della modale grande: prefill finché il campo è
+   vuoto, poi il numero è dell'utente (meglio: del suo banco di prova). */
+async function suggerisciDensitaQc() {
+  const nome = $("qc-prod-nome").value.trim();
+  if (!QC_DENS_AUTO || !nome || $("qc-densita").value) return;
+  try {
+    const r = await fetch("/api/anagrafiche/densita-suggerita?nome=" + encodeURIComponent(nome));
+    const corpo = await r.json();
+    if (corpo.densita) {
+      $("qc-densita").value = corpo.densita;
+      $("qc-densita-hint").textContent = "Suggerita per '" + corpo.parola + "' (tabella Densità tipiche): controllala e correggila se serve.";
+    }
+  } catch (e) { /* offline: campo libero, e il backend la eredita comunque */ }
+}
+
+$("qc-prod-nome").addEventListener("input", suggerisciDensitaQc);
+$("qc-densita").addEventListener("input", () => { QC_DENS_AUTO = false; });
 $("nai-denom").addEventListener("input", () => { NAI_DENOM_AUTO = false; });
+$("nai-densita").addEventListener("input", () => { NAI_DENS_AUTO = false; });
+
+/* ============ DENSITÀ TIPICHE (RIFIN 52): catalogo personalizzabile ============
+   Le voci aggiunte qui VINCONO sulle predefinite del codice (um.py); il
+   matcher resta quello di sempre (parola intera, la più lunga vince). */
+let DENS_CUSTOM = [];
+
+function densEsc(t) {
+  return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function mostraErroreDensita(msg) {
+  $("dens-errore").textContent = msg;
+  $("dens-errore").hidden = false;
+}
+
+function renderDensitaTipiche(predefinite) {
+  const riga = (parola, d, mia) =>
+    '<div class="dens-riga"><span class="parola">' + densEsc(parola) + "</span>" +
+    "<span>" + String(d).replace(".", ",") + " g/ml " +
+    (mia ? '<button class="btn sec" data-dens-del="' + densEsc(parola) + '" title="Togli la tua voce">✕</button>'
+         : '<span class="badge b-gray">catalogo</span>') + "</span></div>";
+  $("dens-lista").innerHTML =
+    (DENS_CUSTOM.length ? ""
+      : '<div class="dens-riga hint">Nessuna voce tua: il suggerimento arriva tutto dal catalogo interno.</div>') +
+    DENS_CUSTOM.map(v => riga(v.parola, v.densita, true)).join("") +
+    '<div class="dens-riga hint">Predefinite (non si eliminano: per cambiarle aggiungi la stessa parola con il tuo valore):</div>' +
+    predefinite.map(v => riga(v.parola, v.densita, false)).join("");
+}
+
+async function apriDensitaTipiche() {
+  $("dens-parola").value = "";
+  $("dens-val").value = "";
+  $("dens-errore").hidden = true;
+  $("overlay-anag-dens").hidden = false;
+  $("dens-lista").innerHTML = '<div class="loading">carico i dati…</div>';
+  try {
+    const r = await fetch("/api/anagrafiche/densita-custom");
+    const corpo = await r.json();
+    DENS_CUSTOM = corpo.custom || [];
+    renderDensitaTipiche(corpo.predefinite || []);
+  } catch (e) {
+    $("dens-lista").innerHTML = '<div class="loading">Il server non risponde.</div>';
+  }
+}
+
+$("anag-dens-btn").addEventListener("click", apriDensitaTipiche);
+$("dens-chiudi").addEventListener("click", () => chiudiOverlay("overlay-anag-dens"));
+
+$("dens-lista").addEventListener("click", async (e) => {
+  const del = e.target.closest("[data-dens-del]");
+  if (!del) return;
+  if (!confirm('Togliere la tua voce "' + del.dataset.densDel +
+    '"? Se esiste anche nel catalogo interno, quella torna a farsi avanti.')) return;
+  try {
+    const r = await fetch("/api/anagrafiche/densita-custom/" +
+      encodeURIComponent(del.dataset.densDel), { method: "DELETE" });
+    if (r.status === 204) { flashAnagrafiche("Voce tolta."); apriDensitaTipiche(); }
+    else mostraErroreDensita("Eliminazione rifiutata.");
+  } catch (e) { mostraErroreDensita("Il server non risponde."); }
+});
+
+$("dens-aggiungi").addEventListener("click", async () => {
+  const parola = $("dens-parola").value.trim();
+  const val = $("dens-val").value;
+  if (!parola) return mostraErroreDensita("Inserisci la parola del nome (es. latte).");
+  if (!val) return mostraErroreDensita("Inserisci la densità in g/ml (es. 1,04).");
+  $("dens-errore").hidden = true;
+  try {
+    const r = await fetch("/api/anagrafiche/densita-custom", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ parola: parola, densita: Number(val) }),
+    });
+    if (!r.ok) {
+      const c = await r.json();
+      return mostraErroreDensita(typeof c.detail === "string" ? c.detail : "Creazione rifiutata.");
+    }
+    flashAnagrafiche('Voce "' + parola + '" salvata: vince sul catalogo.');
+    apriDensitaTipiche();
+  } catch (e) { mostraErroreDensita("Il server non risponde."); }
+});
 
 $("nai-chips").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip-allergene");
@@ -3250,6 +3558,7 @@ $("nai-salva").addEventListener("click", async () => {
         conservazione: $("nai-cons").value,
         unita_misura: $("nai-um").value.trim(),
         sigla: $("nai-sigla").value.trim() || null,
+        densita: $("nai-densita").value === "" ? null : Number($("nai-densita").value),
         note: $("nai-note").value.trim() || null,
         allergeni: [...NAI_ATTIVI],
       }),
@@ -3350,6 +3659,9 @@ $("nap-salva").addEventListener("click", async () => {
     if (!FAMIGLIE.length) { try { await caricaFamiglie(); } catch (e) { /* si crea a mano */ } }
     apriFormRicetta({ prodotto: { id: corpo.id, nome: corpo.nome, unita_misura: corpo.unita_misura }, righe: [] });
     $("nr-titolo").textContent = "Nuova ricetta: " + corpo.nome;
+    // RIFIN 45: dichiara il candidato DOPO apriFormRicetta (che azzera):
+    // annullando la modale senza salvare, lui se ne va col form
+    NUOVO_CANDIDATO_ID = corpo.id;
   } catch (e) {
     $("nap-errore").textContent = "Il server non risponde.";
     $("nap-errore").hidden = false;

@@ -13,6 +13,8 @@ Regole di design (fisse):
 CONSERVAZIONI = ("Frigo", "Freezer", "Magazzino")
 
 from . import um   # le 4 u.m. di sistema = le chiavi di conversione di um.py
+from .um import densita_suggerita   # RIFIN 53: import diretto (dentro le
+                                    # funzioni "um" è la u.m. dell'ingrediente)
 UM_DI_SISTEMA = set(um.MASSA) | set(um.VOLUME)   # {'g', 'kg', 'ml', 'lt'}
 
 # I 14 allergeni obbligatori da etichetta (Reg. UE 1169/2011, Allegato II):
@@ -82,6 +84,25 @@ def _tipo(conn, p):
         "SELECT 1 FROM lotti_ingresso WHERE prodotto_id = ? LIMIT 1", (p["id"],)
     ).fetchone()
     return "ingrediente" if arrivato else "prodotto"
+
+
+def _fantasma(conn, p):
+    """Un CANDIDATO abbandonato: nato da un ➕ e mai completato (RIFIN 45).
+
+    Nessuna famiglia, nessuna conservazione, nessun arrivo, nessuna
+    produzione, nessuna ricetta: zero storia, niente da salvare (tanto
+    vale sigla e u.m.: chi lo ricrea porta i valori freschi). Un nome
+    così NON deve intrappolare nessuno: chi lo ricrea lo COMPLETA,
+    riusando la stessa riga.
+    """
+    if p["famiglia_id"] is not None or p["conservazione"] is not None:
+        return False
+    for tabella in ("lotti_ingresso", "lotti_interni", "ricette"):
+        if conn.execute(
+            f"SELECT 1 FROM {tabella} WHERE prodotto_id = ? LIMIT 1", (p["id"],)
+        ).fetchone():
+            return False
+    return True
 
 
 def allergeni_prodotto(conn, prodotto_id):
@@ -198,6 +219,54 @@ def lista_prodotti(conn, testo="", famiglia_id=0):
     return righe
 
 
+def lista_anagrafica(conn, tipo=None):
+    """Tutta la tabella prodotti per i POOL dell'interfaccia (RIFIN 46).
+
+    Il filtro è il TIPO vero (_tipo: conservazione o arrivi = ingrediente,
+    tutto il resto = prodotto), NON la famiglia grezza. Fino a RIFIN 45
+    la lista "ingrediente" era solo un WHERE famiglia IS NULL: un prodotto
+    di laboratorio nato dal ➕ e ancora senza ricetta (famiglia NULL finché
+    non la salva) finiva TRA GLI INGREDIENTI nei raw e nelle tendine
+    (il caso "Torta al cioccolato creata come prodotto"). Ora è dove deve
+    stare: tra i PRODOTTI (raggiungibile dal combo "Prodotto" della
+    Nuova ricetta, gruppo "Senza famiglia", per completarlo).
+
+    tipo: None = tutto, "ingrediente" o "prodotto".
+    """
+    if tipo not in (None, "ingrediente", "prodotto"):
+        raise ErroreAnagrafica("tipo: ingrediente oppure prodotto")
+    out = []
+    for r in conn.execute(
+        "SELECT p.*, f.nome AS famiglia FROM prodotti p "
+        "LEFT JOIN famiglie f ON f.id = p.famiglia_id ORDER BY p.nome"
+    ).fetchall():
+        p = dict(r)
+        if tipo is None or _tipo(conn, p) == tipo:
+            out.append(p)
+    return out
+
+
+def lista_candidati(conn):
+    """I CANDIDATI: prodotti nati da un ➕ e mai completati (RIFIN 47).
+
+    Zero famiglia, conservazione, arrivi, produzioni e ricette: la riga
+    esiste e il nome è suo, ma nessuna card la mostra (gerarchia stretta:
+    il prodotto esiste attraverso la sua ricetta). La riga in fondo alla
+    card Prodotti li rende VISIBILI e gestibili: completarli (la ricetta
+    li fa nascere per davvero) oppure eliminarli (l'eliminazione protetta
+    li lascia andare: non hanno nulla da proteggere, e il nome si libera).
+    """
+    out = []
+    for r in conn.execute(
+        "SELECT p.*, f.nome AS famiglia FROM prodotti p "
+        "LEFT JOIN famiglie f ON f.id = p.famiglia_id ORDER BY p.nome"
+    ).fetchall():
+        p = dict(r)
+        if _tipo(conn, p) == "prodotto" and _fantasma(conn, p):
+            out.append(p)
+    return out
+
+
 # ---- dettagli (le schede di modifica) ----
 
 def dettaglio_prodotto(conn, prodotto_id):
@@ -264,10 +333,30 @@ def _valida_allergeni(conn, ids):
     return ids
 
 
+def _densita_valida(dati):
+    """RIFIN 51: densità (g/ml) facoltativa, ma se c'è deve essere > 0
+    (il ponte peso<->volume lo usa um.fattore_liquido)."""
+    d = dati.get("densita")
+    if d in (None, ""):
+        return None
+    if isinstance(d, str):
+        d = d.strip().replace(",", ".")
+    try:
+        d = float(d)
+    except (TypeError, ValueError):
+        d = -1.0
+    if d <= 0:
+        raise ErroreAnagrafica(
+            "Densità: numero maggiore di zero (es. 1,03 per il latte)"
+        )
+    return d
+
+
 def crea_ingrediente(conn, dati, da_anagrafica=False):
     """Nasce l'INGREDIENTE: conservazione, denominazione legale (obbligatoria
     se richiesta dall'anagrafica), allergeni. La creazione rapida dalle combo
-    di altre sezioni resta più lasca (si completa in Anagrafiche)."""
+    di altre sezioni resta più lasca (si completa in Anagrafiche). Se la
+    densità non arriva, la si eredita dalla tabella dei suggerimenti (RIFIN 53)."""
     nome = (dati.get("nome") or "").strip()
     if not nome:
         raise ErroreAnagrafica("Il nome dell'ingrediente è obbligatorio")
@@ -283,17 +372,54 @@ def crea_ingrediente(conn, dati, da_anagrafica=False):
             "La denominazione legale è obbligatoria: finisce nell'etichetta "
             "dei prodotti finiti (es. farina 00 → Farina di grano tenero tipo 00)"
         )
+    densita = _densita_valida(dati)
+    if densita is None:
+        # RIFIN 53: la densità si EREDITA da sé. Se l'utente non l'ha scritta,
+        # la creazione la prende dalla TABELLA (le sue voci custom prima, il
+        # catalogo poi): "Latte" e "Latte intero" prendono entrambi la loro
+        # densità dalla stessa voce, da QUALSIASI form nascano (➕ rapido di
+        # produzioni/ricette/arrivi o modale Anagrafiche). Solo alla CREAZIONE:
+        # in salvataggio la scheda è maestra, tolta resta tolta.
+        suggerita_ = densita_suggerita(conn, nome)
+        densita = suggerita_[1] if suggerita_ else None
     allergeni = _valida_allergeni(conn, dati.get("allergeni") or [])
-    cur = conn.execute(
-        "INSERT INTO prodotti (nome, famiglia_id, conservazione, unita_misura, "
-        "sigla, marca, denominazione_legale, note) "
-        "VALUES (?, NULL, ?, ?, ?, ?, ?, ?)",
-        (nome, conservazione, um,
-         (dati.get("sigla") or "").strip().upper() or None,
-         (dati.get("marca") or "").strip() or None,
-         denominazione, (dati.get("note") or "").strip() or None),
-    )
-    pid = cur.lastrowid
+    gia = conn.execute(
+        "SELECT * FROM prodotti WHERE LOWER(nome) = LOWER(?)", (nome,)
+    ).fetchone()
+    if gia and _fantasma(conn, gia):
+        # RIFIN 45: nome di un CANDIDATO abbandonato (senza storia):
+        # lo si completa riusando la stessa riga, il nome non si intrappola
+        pid = gia["id"]
+        conn.execute("DELETE FROM prodotti_allergeni WHERE prodotto_id = ?", (pid,))
+        conn.execute(
+            "UPDATE prodotti SET nome = ?, conservazione = ?, unita_misura = ?, "
+            "sigla = ?, marca = ?, denominazione_legale = ?, densita = ?, "
+            "note = ? WHERE id = ?",
+            (nome, conservazione, um,
+             (dati.get("sigla") or "").strip().upper() or None,
+             (dati.get("marca") or "").strip() or None,
+             denominazione, densita, (dati.get("note") or "").strip() or None, pid),
+        )
+    elif gia:
+        # nome già preso da un'anagrafica VERA: il messaggio dice cos'è
+        # e dove guardarla (la scheda esiste già, non si crea niente)
+        ingrediente = _tipo(conn, gia) == "ingrediente"
+        cosa = "ingrediente acquistato" if ingrediente else "prodotto di laboratorio"
+        dove = "card Ingredienti" if ingrediente else "card Prodotti"
+        raise ErroreAnagrafica(
+            f"'{nome}' esiste già: è un {cosa} ({dove} di Anagrafiche)"
+        )
+    else:
+        cur = conn.execute(
+            "INSERT INTO prodotti (nome, famiglia_id, conservazione, unita_misura, "
+            "sigla, marca, denominazione_legale, densita, note) "
+            "VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)",
+            (nome, conservazione, um,
+             (dati.get("sigla") or "").strip().upper() or None,
+             (dati.get("marca") or "").strip() or None,
+             denominazione, densita, (dati.get("note") or "").strip() or None),
+        )
+        pid = cur.lastrowid
     for a in allergeni:
         conn.execute(
             "INSERT INTO prodotti_allergeni (prodotto_id, allergene_id) "
@@ -330,11 +456,13 @@ def salva_prodotto(conn, dati):
                 "dei prodotti finiti"
             )
         marca = (dati.get("marca") or "").strip() or None
+        densita = _densita_valida(dati)
         allergeni = _valida_allergeni(conn, dati.get("allergeni") or [])
         conn.execute(
             "UPDATE prodotti SET nome = ?, conservazione = ?, unita_misura = ?, "
-            "sigla = ?, marca = ?, denominazione_legale = ?, note = ? WHERE id = ?",
-            (nome, conservazione, um, sigla, marca, denominazione, note, pid),
+            "sigla = ?, marca = ?, denominazione_legale = ?, densita = ?, "
+            "note = ? WHERE id = ?",
+            (nome, conservazione, um, sigla, marca, denominazione, densita, note, pid),
         )
         conn.execute(
             "DELETE FROM prodotti_allergeni WHERE prodotto_id = ?", (pid,)
@@ -553,3 +681,45 @@ def elimina_unita(conn, unita_id):
             f"In uso da {usata} prodotti: eliminazione bloccata"
         )
     conn.execute("DELETE FROM unita_misura WHERE id = ?", (unita_id,))
+
+
+# ---- Densità tipiche personalizzate (RIFIN 52) ----
+
+def lista_densita_custom(conn):
+    """Le voci AGGIUNTE dall'utente: vincono sulle predefinite (um.py)."""
+    return [dict(r) for r in conn.execute(
+        "SELECT parola, densita FROM densita_custom ORDER BY parola")]
+
+
+def aggiungi_densita_custom(conn, dati):
+    """Aggiunge o CORREGGE una voce del catalogo densità. La parola si
+    normalizza come la cerca il matcher (minuscolo, senza accenti):
+    'Caffè' e 'CAFFE' sono la stessa voce. Ammesse più parole (come il
+    predefinito "latte condensato")."""
+    parola = um._normalizza(dati.get("parola") or "")
+    if not parola:
+        raise ErroreAnagrafica(
+            "La parola è obbligatoria: una o più parole del nome "
+            "dell'ingrediente (es. latte, pasta di nocciole)"
+        )
+    if len(parola) > 60:
+        raise ErroreAnagrafica("La parola è troppo lunga (max 60 caratteri)")
+    densita = _densita_valida(dati)
+    gia = conn.execute(
+        "SELECT parola FROM densita_custom WHERE parola = ?", (parola,)
+    ).fetchone()
+    if gia:
+        conn.execute("UPDATE densita_custom SET densita = ? WHERE parola = ?",
+                     (densita, parola))
+    else:
+        conn.execute("INSERT INTO densita_custom (parola, densita) "
+                     "VALUES (?, ?)", (parola, densita))
+    return {"parola": parola, "densita": densita}
+
+
+def elimina_densita_custom(conn, parola):
+    """Toglie una voce PERSONALE: se esisteva anche nel catalogo
+    predefinito, quello torna a farsi vivo da solo."""
+    conn.execute("DELETE FROM densita_custom WHERE parola = ?",
+                 (um._normalizza(parola),))
+    return True

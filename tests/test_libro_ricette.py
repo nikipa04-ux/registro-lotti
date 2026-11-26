@@ -144,3 +144,66 @@ def test_libro_pdf_senza_produttore_nessuna_righe_in_piu(conn):
     pdf = libro_ricette_pdf(conn)
     assert b"P.IVA" not in pdf
     assert b"Libro ricette" in pdf
+
+
+# ---- RIFIN 44: ingredienti COMPOSTI (parti in scheda, senza dose) ----
+
+def _bigne_con_cioccolato(conn):
+    """Il bigne' usa anche cioccolato composto (parti a virgola) e
+    zucchero DIRETTO: la parte 'zucchero' e' doppione e sparisce."""
+    conn.execute(
+        "INSERT INTO prodotti (id, nome, denominazione_legale) "
+        "VALUES (10, 'Cioccolato fondente', 'zucchero, pasta di cacao, burro di cacao')")
+    conn.execute(
+        "INSERT INTO ricette_righe (ricetta_id, ingrediente_id, quantita) "
+        "VALUES (11, 10, 0.5), (11, 3, 0.2)")
+    conn.commit()
+
+
+def test_composto_parti_in_scheda_con_dedup(conn):
+    _bigne_con_cioccolato(conn)
+    bigne = [s for s in schede_ricette(conn) if s["prodotto"] == "Bignè"][0]
+    righe = {r["nome"]: r for r in bigne["righe"]}
+    # l'ingrediente resta UNO col nome singolo e la sua dose
+    assert righe["Cioccolato fondente"]["quantita"] == 0.5
+    # le parti sotto di lui, senza dose, deduppate nella scheda:
+    # 'zucchero' c'e' gia' come ingrediente vero della ricetta
+    assert righe["Cioccolato fondente"]["parti"] == [
+        "pasta di cacao", "burro di cacao"]
+    assert righe["Zucchero"]["parti"] == []
+    assert righe["Crema pasticcera"]["parti"] == []  # non composto: niente parti
+
+
+def test_libro_pdf_composto_parti_senza_dose(conn):
+    _bigne_con_cioccolato(conn)
+    pdf = libro_ricette_pdf(conn)
+    # la riga del composto con la sua dose, poi le parti appiattite...
+    assert b"- Cioccolato fondente" in pdf
+    assert b"- pasta di cacao" in pdf
+    assert b"- burro di cacao" in pdf
+    # ...e la parte 'zucchero' NON si ripete: c'e' gia' l'ingrediente
+    # vero '- Zucchero' (con la maiuscola del nome) nella scheda
+    assert b"- zucchero" not in pdf
+
+
+# ---- RIFIN 51: il libro mostra la dose COME L'HAI SCRITTA ----
+
+def test_schede_dose_in_grammi_con_densita(conn):
+    """500 g di latte (densità 1,03) valgono 0,485 lt canonici: la banca
+    dati resta canonica, ma il livro è il documento del LABORATORIO e
+    mostra i grammi che l'utente ha scritto."""
+    conn.execute("UPDATE prodotti SET densita = 1.03 WHERE id = 1")
+    qta_canonica = 500 / 1.03 / 1000
+    conn.execute(
+        "UPDATE ricette_righe SET quantita = ?, um_scritta = 'g' "
+        "WHERE ricetta_id = 10 AND ingrediente_id = 1",
+        (qta_canonica,),
+    )
+    conn.commit()
+    schede = schede_ricette(conn)
+    riga_latte = [r for r in schede[1]["righe"] if r["nome"] == "Latte fresco"][0]
+    assert riga_latte["um"] == "g"
+    assert abs(riga_latte["quantita"] - 500) < 1e-6
+    # e il PDF pure: "Latte fresco · 500 g"
+    pdf = libro_ricette_pdf(conn)
+    assert b"Latte fresco \xb7 500 g" in pdf

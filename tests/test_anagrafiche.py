@@ -3,15 +3,20 @@ import pytest
 from app import db
 from app.logic.anagrafiche import (
     ErroreAnagrafica,
+    aggiungi_densita_custom,
     allergeni_da_ricetta,
     crea_ingrediente,
     crea_unita,
     dettaglio_fornitore,
     dettaglio_prodotto,
+    elimina_densita_custom,
     elimina_fornitore,
     elimina_prodotto,
     elimina_unita,
     garantisci_allergeni_di_legge,
+    lista_anagrafica,
+    lista_candidati,
+    lista_densita_custom,
     lista_ingredienti,
     lista_prodotti,
     lista_unita,
@@ -111,6 +116,20 @@ def test_il_candidato_senza_ricetta_e_nel_mondo_ma_non_in_card(conn):
         "SELECT nome FROM prodotti WHERE id = 5"
     ).fetchone()["nome"] == "Tortina"
     assert "Tortina" not in [p["nome"] for p in lista_prodotti(conn)]
+
+
+def test_lista_anagrafica_classifica_per_tipo_non_per_famiglia(conn):
+    # RIFIN 46, il caso "Torta al cioccolato tra gli ingredienti": il pool
+    # grezzo che alimenta le tendine filtra per TIPO vero, non per famiglia:
+    # il candidato senza ricetta (famiglia NULL) NON è un ingrediente
+    ing = [p["nome"] for p in lista_anagrafica(conn, "ingrediente")]
+    assert ing == ["Latte intero", "Uova"]        # Tortina NON c'è più
+    prod = [p["nome"] for p in lista_anagrafica(conn, "prodotto")]
+    assert "Tortina" in prod                      # è un prodotto in attesa:
+    # raggiungibile dal combo "Prodotto" della Nuova ricetta per completarlo
+    assert "Crema pasticcera" in prod
+    assert not set(ing) & set(prod)               # ogni riga: UNA identità
+    assert len(lista_anagrafica(conn)) == len(ing) + len(prod)
 
 
 def test_lista_prodotti_filtro_famiglia(conn):
@@ -419,3 +438,155 @@ def test_elimina_unita_solo_se_libera(conn):
         "SELECT id FROM unita_misura WHERE nome = 'pz'").fetchone()["id"]
     with pytest.raises(ErroreAnagrafica, match="In uso"):
         elimina_unita(conn, pz_id)     # 3 prodotti la usano: bloccata
+
+
+# ---- RIFIN 45: il nome non resta mai intrappolato (creazione ingrediente) ----
+
+def test_crea_ingrediente_duplicato_respinto_con_indicazioni(conn):
+    # il nome di un ingrediente VERO non si prende due volte (prima il
+    # controllo NON esisteva affatto): il messaggio dice dov'è la scheda
+    with pytest.raises(ErroreAnagrafica, match="esiste già"):
+        crea_ingrediente(conn, {
+            "nome": "latte INTERO", "conservazione": "Frigo",
+            "unita_misura": "lt", "denominazione_legale": "Latte fresco"})
+    with pytest.raises(ErroreAnagrafica, match="card Ingredienti"):
+        crea_ingrediente(conn, {
+            "nome": "Latte intero", "conservazione": "Frigo",
+            "unita_misura": "lt", "denominazione_legale": "Latte fresco"})
+
+
+def test_crea_ingrediente_riusa_il_candidato_abbandonato(conn):
+    # il caso "Torta al cioccolato": una riga nata da un ➕ mai completato
+    # (niente famiglia/conservazione/storia) si COMPLETA, stesso id
+    conn.execute("INSERT INTO prodotti (nome) VALUES ('Torta al cioccolato')")
+    fantasma_id = conn.execute(
+        "SELECT id FROM prodotti WHERE nome = 'Torta al cioccolato'").fetchone()["id"]
+    p = crea_ingrediente(conn, {
+        "nome": "torta al cioccolato", "conservazione": "Frigo",
+        "unita_misura": "kg", "denominazione_legale": "Torta al cioccolato",
+        "allergeni": [1, 2]})
+    assert p["id"] == fantasma_id          # riusata, non duplicata
+    assert p["conservazione"] == "Frigo"   # ...e completata per davvero
+    # gli allergeni dichiarati alla nascita viaggiano nella scheda
+    assert sorted(a["id"] for a in p["allergeni"]) == [1, 2]
+    n = conn.execute(
+        "SELECT COUNT(*) AS n FROM prodotti "
+        "WHERE LOWER(nome) = LOWER('Torta al cioccolato')").fetchone()["n"]
+    assert n == 1
+
+
+# ---- RIFIN 47: i candidati VISIBILI e gestibili dalla card Prodotti ----
+
+def test_lista_candidati_solo_gli_abbandonati(conn):
+    # Tortina (id 5): nata dal ➕, mai completata. Crema/Bignè hanno ricetta,
+    # Latte/Uova sono ingredienti: UN solo candidato in lista
+    cand = lista_candidati(conn)
+    assert [c["nome"] for c in cand] == ["Tortina"]
+    assert cand[0]["id"] == 5            # il pannello Completa/Elimina
+    # lo completa la ricetta: e il candidato SPARISCE
+    fam = conn.execute("SELECT id FROM famiglie WHERE nome = 'Creme'").fetchone()["id"]
+    conn.execute(
+        "INSERT INTO ricette (prodotto_id, famiglia_id, resa) VALUES (5, ?, '8 pz')",
+        (fam,))
+    conn.commit()
+    assert lista_candidati(conn) == []
+
+
+# ---- RIFIN 51: la densità (g/ml) vive nella scheda dell'ingrediente ----
+
+def test_ingrediente_con_densita_e_modifica(conn):
+    # il fixture ha già il suo "Latte intero": qui serve un liquido NUOVO
+    p = crea_ingrediente(conn, {"nome": "Olio di semi", "conservazione": "Magazzino",
+                                "unita_misura": "lt", "densita": 1.03},
+                         da_anagrafica=False)
+    assert p["densita"] == 1.03
+    # la MODIFICA (PUT anagrafica) la aggiorna: il dato resta dell'utente
+    salva_prodotto(conn, {"id": p["id"], "nome": "Olio di semi",
+                          "conservazione": "Magazzino", "unita_misura": "lt",
+                          "denominazione_legale": "olio di semi", "densita": 1.04})
+    assert dettaglio_prodotto(conn, p["id"])["densita"] == 1.04
+    # e si può anche togliere del tutto
+    salva_prodotto(conn, {"id": p["id"], "nome": "Olio di semi",
+                          "conservazione": "Magazzino", "unita_misura": "lt",
+                          "denominazione_legale": "olio di semi"})
+    assert dettaglio_prodotto(conn, p["id"])["densita"] is None
+
+
+def test_ingrediente_densita_con_virgola_dei_pasticceri(conn):
+    # "1,03" con la virgola si accetta: chi pesa 103 g su 100 ml
+    # scrive quel che legge sulla bilancia
+    p = crea_ingrediente(conn, {"nome": "Panna da montare", "conservazione": "Frigo",
+                                "unita_misura": "lt", "densita": " 1,03 "},
+                         da_anagrafica=False)
+    assert p["densita"] == 1.03
+
+
+def test_ingrediente_densita_sporca_respinta(conn):
+    for lurida in (0, -1, "tanta"):
+        with pytest.raises(ErroreAnagrafica, match="Densità"):
+            crea_ingrediente(conn, {"nome": "Sciroppo di prova", "conservazione": "Magazzino",
+                                    "unita_misura": "lt", "densita": lurida},
+                             da_anagrafica=False)
+
+
+def test_densita_custom_aggiunta_normalizzata_e_aggiornata(conn):
+    # RIFIN 52: "Caffè" diventa "caffe" (minuscolo, senza accenti);
+    # ripetere la parola AGGIORNA il valore, non duplica la riga
+    v = aggiungi_densita_custom(conn, {"parola": "  Caffè  ", "densita": 0.98})
+    assert v == {"parola": "caffe", "densita": 0.98}
+    v = aggiungi_densita_custom(conn, {"parola": "CAFFÈ", "densita": 1.02})
+    assert v["densita"] == 1.02
+    assert lista_densita_custom(conn) == [{"parola": "caffe", "densita": 1.02}]
+
+
+def test_densita_custom_sporca_respinta(conn):
+    # parola vuota o densità lurida: niente, come per l'anagrafica
+    with pytest.raises(ErroreAnagrafica, match="obbligatoria"):
+        aggiungi_densita_custom(conn, {"parola": "   ", "densita": 1.03})
+    with pytest.raises(ErroreAnagrafica, match="maggiore di zero"):
+        aggiungi_densita_custom(conn, {"parola": "sciroppo d'acero", "densita": "tanta"})
+
+
+def test_densita_custom_eliminata(conn):
+    aggiungi_densita_custom(conn, {"parola": "sciroppo d'acero", "densita": "1,10"})
+    # anche eliminando con accenti/maiuscole: la voce è quella
+    elimina_densita_custom(conn, "Sciroppo D'Acero")
+    assert lista_densita_custom(conn) == []
+    elimina_densita_custom(conn, "mai esistita")  # via tranquilla (idempotente)
+
+
+def test_densita_custom_sovrascrive_il_suggerimento(conn):
+    # la somma dei due mondi: la voce dell'utente entra nel suggerimento
+    from app.logic.um import densita_suggerita
+    aggiungi_densita_custom(conn, {"parola": "latte crudo", "densita": 1.035})
+    assert densita_suggerita(conn, "Latte crudo fresco") == ("latte crudo", 1.035)
+    assert densita_suggerita(conn, "Latte fresco") == ("latte", 1.03)
+
+
+def test_creazione_eredita_densita_dalla_tabella(conn):
+    # RIFIN 53: crei "Latte fresco di malga" da QUALSIASI form senza densità
+    # → il backend la prende dalla tabella (la stessa del "Latte intero")
+    p = crea_ingrediente(conn, {"nome": "Latte fresco di malga", "conservazione": "Frigo",
+                                "unita_misura": "lt"}, da_anagrafica=False)
+    assert p["densita"] == 1.03
+
+
+def test_creazione_densita_scritta_vince_sulla_tabella(conn):
+    p = crea_ingrediente(conn, {"nome": "Olio di oliva", "conservazione": "Magazzino",
+                                "unita_misura": "lt", "densita": 0.916},
+                         da_anagrafica=False)
+    assert p["densita"] == 0.916   # non lo 0,92 del catalogo
+
+
+def test_creazione_senza_match_niente_densita_auto(conn):
+    p = crea_ingrediente(conn, {"nome": "Farina di riso", "conservazione": "Magazzino",
+                                "unita_misura": "kg"}, da_anagrafica=False)
+    assert p["densita"] is None
+
+
+def test_fantasma_reuse_eredita_densita(conn):
+    # il candidato abbandonato riprende la stessa strada: nome → tabella
+    conn.execute("INSERT INTO prodotti (nome, unita_misura) VALUES ('Latte crudo', 'lt')")
+    p = crea_ingrediente(conn, {"nome": "Latte crudo", "conservazione": "Frigo",
+                                "unita_misura": "lt"}, da_anagrafica=False)
+    assert p["densita"] == 1.03

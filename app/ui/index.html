@@ -105,7 +105,10 @@
 
       <div class="card">
         <div class="card-head"><h2>🛒 Ingredienti <span class="badge b-gray" id="anag-conta-ing"></span></h2>
-          <button class="btn sec" id="anag-nuovo-ing">+ Nuovo</button></div>
+          <div class="azioni-gruppo">
+            <button class="btn sec" id="anag-dens-btn">💧 Densità tipiche</button>
+            <button class="btn sec" id="anag-nuovo-ing">+ Nuovo</button>
+          </div></div>
         <input class="anag-cerca" id="cerca-anag-ing" type="search" placeholder="Cerca ingrediente (nome o marca)…" autocomplete="off">
         <div class="scroll-list anag-alta" id="tabella-anag-ing"><div class="loading">carico i dati…</div></div>
       </div>
@@ -116,6 +119,7 @@
         <div id="anag-filtro-fam" hidden></div>
         <input class="anag-cerca" id="cerca-anag-pro" type="search" placeholder="Cerca prodotto…" autocomplete="off">
         <div class="scroll-list anag-alta" id="tabella-anag-pro"><div class="loading">carico i dati…</div></div>
+        <div id="anag-candidati" class="hint" hidden></div>
         <div class="hint">Il prodotto vive attraverso la sua ricetta (il master): il ➕ crea l'anagrafica e apre subito la ricetta. Qui si vedono solo prodotti con ricetta.</div>
       </div>
 
@@ -368,6 +372,11 @@
           <label for="qc-sigla">Sigla (facoltativa)</label>
           <input id="qc-sigla" type="text" placeholder="es. PAN">
         </div>
+        <div class="f-campo">
+          <label for="qc-densita">Densità g/ml <span class="muted">(liquidi)</span></label>
+          <input id="qc-densita" type="number" step="0.001" min="0" placeholder="es. 1,03" autocomplete="off">
+          <div class="hint" id="qc-densita-hint">Con la densità puoi scrivere i grammi anche su un liquido in litri. Se lasci il campo vuoto, la prende da sola dalla tabella Densità tipiche.</div>
+        </div>
       </div>
       <div class="f-row">
         <div class="f-campo">
@@ -376,7 +385,8 @@
         </div>
         <div class="f-campo">
           <label for="qc-denom">Denominazione legale (facoltativa)</label>
-          <input id="qc-denom" type="text" placeholder="come sull'etichetta d'acquisto">
+          <input id="qc-denom" type="text" placeholder="come sull'etichetta d'acquisto"
+                 title="Ingrediente composto (es. cioccolato): scrivi SOLO le parti separate da virgola, es. 'zucchero, pasta di cacao, burro di cacao'. Nell'etichetta e nel libro ricette le parti compaiono come righe distinte, i doppioni eliminati.">
         </div>
       </div>
       <div class="f-campo">
@@ -641,6 +651,11 @@
         <label for="nai-marca">Marca abituale (facoltativa)</label>
         <input id="nai-marca" type="text" placeholder="default degli arrivi">
       </div>
+      <div class="f-campo">
+        <label for="nai-densita">Densità g/ml <span class="muted">(liquidi)</span></label>
+        <input id="nai-densita" type="number" step="0.001" min="0" placeholder="es. 1,03" autocomplete="off">
+        <div class="hint" id="nai-densita-hint">Il ponte peso↔volume: con la densità puoi scrivere i grammi anche su un liquido in litri (500 g di latte = 0,485 lt nello scarico). Trucco da banco: pesa 100 ml, i grammi letti SONO la densità.</div>
+      </div>
     </div>
     <div class="f-campo">
       <label>Allergeni <span class="muted">(clic per attivare/disattivare)</span></label>
@@ -715,6 +730,31 @@
     <div class="f-azioni">
       <button class="btn sec" id="nap-annulla">Annulla</button>
       <button class="btn" id="nap-salva">Crea e apri la ricetta</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= DENSITÀ TIPICHE (anagrafiche, RIFIN 52) ================= -->
+<div class="overlay" id="overlay-anag-dens" hidden>
+  <div class="modal">
+    <h2>💧 Densità tipiche</h2>
+    <p class="sub">Il catalogo che suggerisce la densità quando crei un ingrediente. Le tue voci vincono sulle predefinite; il suggerimento resta modificabile in ogni scheda.</p>
+    <div class="dens-lista" id="dens-lista"><div class="loading">carico i dati…</div></div>
+    <div class="f-row">
+      <div class="f-campo">
+        <label for="dens-parola">Parola del nome <span class="req">*</span></label>
+        <input id="dens-parola" type="text" placeholder="es. latte, pasta di nocciole" autocomplete="off">
+        <div class="hint">Una o più parole: «Latte di riso» suggerisce 1,04 a ogni ingrediente che le contiene. La stessa parola si aggiorna, non si duplica.</div>
+      </div>
+      <div class="f-campo">
+        <label for="dens-val">Densità g/ml <span class="req">*</span></label>
+        <input id="dens-val" type="number" step="0.001" min="0" placeholder="es. 1,04" autocomplete="off">
+      </div>
+    </div>
+    <div id="dens-errore" class="f-errore" hidden></div>
+    <div class="f-azioni">
+      <button class="btn sec" id="dens-chiudi">Chiudi</button>
+      <button class="btn" id="dens-aggiungi">Aggiungi</button>
     </div>
   </div>
 </div>

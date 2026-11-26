@@ -34,3 +34,20 @@ def test_progressivo_per_giorno_e_prodotto(conn):
 def test_sigla_fallback_dal_nome(conn):
     p = {"id": 1, "nome": "Bignè", "sigla": None}
     assert genera_codice(conn, p, "2026-11-13").startswith("BIG-20261113-")
+
+
+def test_progressivo_dopo_eliminazione_avanza(conn):
+    p = {"id": 1, "nome": "Crema pasticcera", "sigla": "CRP"}
+    conn.execute(
+        "INSERT INTO lotti_interni (prodotto_id, codice_lotto, data_produzione, data_scadenza) "
+        "VALUES (1, 'CRP-20261113-01', '2026-11-13', '2026-11-16')"
+    )
+    conn.execute(
+        "INSERT INTO lotti_interni (prodotto_id, codice_lotto, data_produzione, data_scadenza) "
+        "VALUES (1, 'CRP-20261113-02', '2026-11-13', '2026-11-16')"
+    )
+    conn.execute("DELETE FROM lotti_interni WHERE codice_lotto = 'CRP-20261113-01'")
+    # RIFIN 54: il progressivo guarda il MAX delle code, non il CONTEGGIO
+    # delle righe: eliminata la -01 con la -02 ancora viva, la prossima
+    # è la -03. Il conteggio avrebbe riproposto la -02 (UNIQUE: scontro).
+    assert genera_codice(conn, p, "2026-11-13") == "CRP-20261113-03"

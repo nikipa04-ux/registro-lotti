@@ -80,7 +80,12 @@ def lista_scadenze(conn, finestra="7", oggi=None):
         "SELECT 'interno' AS tipo, li.id, p.nome AS prodotto, "
         "li.codice_lotto AS lotto, NULL AS marca, NULL AS fornitore, "
         "NULL AS conservazione, COALESCE(li.um_prodotta, p.unita_misura) AS um, "
-        "li.qta_prodotta AS quantita, li.data_scadenza AS scadenza "
+        # RIFIN 54: la giacenza del semilavorato è ciò che RESTA del lotto
+        # (prodotta meno i consumi delle altre produzioni), non tutta la
+        # qta prodotta
+        "li.qta_prodotta - COALESCE((SELECT SUM(c.quantita_usata) FROM consumi c "
+        "WHERE c.origine = 'interno' AND c.lotto_origine_id = li.id), 0) AS quantita, "
+        "li.data_scadenza AS scadenza "
         "FROM lotti_interni li "
         "JOIN prodotti p ON p.id = li.prodotto_id "
         "WHERE 1=1 " + cond,

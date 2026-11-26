@@ -70,6 +70,28 @@ eseguibili NON firmati digitalmente che Smart App Control / Device Guard può
 bloccare ("è stato bloccato dai criteri di Device Guard"). Chiamando i moduli
 tramite python.exe (firmato) il problema non si pone mai.
 
+## Avvio (Linux)
+
+```bash
+bash avvia.sh
+```
+
+`avvia.sh` è la controparte Linux di `avvia.bat`: crea/riusa l'ambiente
+virtuale `.venv`, installa le librerie al primo giro e avvia il server su
+http://127.0.0.1:8000 (stessi passi, sintassi bash invece dei `.bat`).
+Avvio manuale equivalente:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r requirements.txt
+python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Su Linux non esiste il problema degli eseguibili non firmati (Smart App
+Control è di Windows), ma la convenzione resta: `python3 -m uvicorn` e
+`python3 -m pytest`, mai i comandi diretti.
+
 ## Test
 
 ```cmd
@@ -136,7 +158,9 @@ La sezione con cui si registra tutto ciò che entra:
   typeahead (tendina raggruppata per conservazione 🧊); se il nome cercato
   non esiste compare "➕ Crea..." che apre la creazione rapida: l'ingrediente
   nasce lì (conservazione, u.m., sigla, marca, denominazione legale e
-  allergeni a chip, già selezionabili) e resta
+  allergeni a chip, già selezionabili; RIFIN 53: anche la DENSITÀ g/ml
+  suggerita dal nome come nella modale grande, e se resta vuota il
+  backend la eredita da solo dalla tabella Densità tipiche) e resta
   selezionato. Date, quantità, prezzo e IVA facoltativi.
 
 Le regole di registrazione vivono nel server (`app/logic/arrivi.py`):
@@ -239,7 +263,12 @@ della ricetta, l'operatore al massimo corregge.
 - **Dettaglio**: clic su una riga → dati del lotto, tracciabilità INDIETRO
   ("deriva da": i lotti consumati con le quantità) e AVANTI ("usato in"),
   etichetta ingredienti CALCOLATA dal verbale (denominazioni in ordine di
-  peso, senza quantità) + "Contiene (allergeni):" dichiarazione degli allergeni
+  peso, senza quantità; ingredienti COMPOSTI, RIFIN 44: se la
+  denominazione legale contiene le parti separate da virgola, es.
+  cioccolato = "zucchero, pasta di cacao, burro di cacao", il backend la
+  splitta in UNA RIGA PER PARTE appiattita con le altre, i doppioni
+  eliminati senza badare a maiuscole) + "Contiene (allergeni):"
+  dichiarazione degli allergeni
   + bottone "🏷 Etichetta PDF": il foglio A4 con la GRIGLIA di etichette
   pronte da stampare e tagliare (2 colonne x 4 righe = 8 per foglio, oltre
   si aggiunge la pagina; parametro `?copie=N`, default 8). Il PDF nasce
@@ -283,14 +312,38 @@ della ricetta, l'operatore al massimo corregge.
      teglie di un prodotto in pz, nessun calcolo automatico e il lotto
      registra la quantità nell'u.m. scelta, che resta visibile in
      dettaglio, scheda prodotto ed etichetta PDF. Il ➕ in fondo crea
-     al volo una u.m. nuova in Anagrafiche senza chiudere il form) →
-     salva
+     al volo una u.m. nuova in Anagrafiche senza chiudere il form).
+     **RIFIN 50**: perché la tendina compaia, il prodotto deve avere una
+     sua u.m. canonica, e a scriverla è la RESA della ricetta, come per
+     la famiglia: "5 kg" assegna kg al prodotto appena nato dal ➕
+     (solo se kg esiste in Anagrafiche ⚖; resa muta o u.m. ignota non
+     tocca nulla). È un suggerimento: in Produzioni lo cambi liberamente,
+     e alla prossima ricetta salvata la resa vince di nuovo → salva
+  4. le righe della proposta mostrano la dose COME SCRITTA in ricetta
+     (`um_scritta`, RIFIN 51): la riga "500 g" di latte resta 500 g
+     anche se il latte vive in litri, con la sua tendina u.m. e il ponte
+     peso↔volume già caricato (la densità viaggia con la riga): lo
+     scarico del lotto resta in u.m. canonica, sempre e comunque
 
 Al salvataggio il server RIVALIDA tutto (`app/logic/produzioni.py`):
 giacenze sufficienti, consumi non vuoti (il verbale), niente lotto ripetuto,
 scadenza non prima della produzione, scarico della `quantita_residua` dei
 lotti in ingresso (le giacenze non si scrivono mai a mano), famiglia
 SNAPSHOT dalla ricetta, codice `SIGLA-AAAAMMGG-NN`.
+
+**RIFIN 54 (audit "produzioni fantasma")**: anche i SEMILAVORATI hanno la
+loro residua: la disponibilità di un lotto interno è quanto è stato
+prodotto MENO quanto le altre produzioni ne hanno già consumato, il
+verbale rifiuta "Giacenza insufficiente" come per gli arrivi, la FEFO
+propone solo la parte avanzata e il Magazzino mostra il residuo reale
+(non tutta la qta prodotta). ANNULLARE una produzione rimette a posto
+tutto da solo: residua degli arrivi ripristinata, semilavorato
+restituito, consumi via col verbale; se il lotto d'arrivo era stato
+AZZERATO a mano, il rientro va nella pila dell'azzeramento (il lotto
+resta chiuso: se anche l'azzeramento era uno sbaglio, il RIPRISTINO del
+lotto se ne occupa). E il progressivo del codice lotto guarda il MAX
+delle code: produrre, annullare, riprodurre non scontra più i codici
+lo stesso giorno.
 
 **Nessun tag "semilavorato"**: è una famiglia a etichettare la riga. Ogni
 ingrediente di ricetta mostra il badge della sua FAMIGLIA (quella della
@@ -328,9 +381,21 @@ la ricetta ora si crea e si corregge dall'interfaccia.
   l'utente ne crea quante ne vuole e la ritrova subito nella card
   Anagrafiche → Famiglie); resa divisa in due campi, quantità (numero) + unità
   di misura (es. "60" + "pz"; in banca dati resta il testo combinato
-  "60 pz", pronto per il futuro calcolatore dinamico), procedimento
+  "60 pz", pronto per il futuro calcolatore dinamico). **RIFIN 50**:
+  l'unità della resa, se esiste in Anagrafiche ⚖ u.m., scrive/aggiorna
+  l'u.m. CANONICA del prodotto (il cammino dell'etichetta: senza di
+  essa la tendina u.m. di Produzioni non può comparire),
+  procedimento
   facoltativo, righe ingrediente+quantità (ingredienti acquistati e
-  prodotti di laboratorio, come le aggiunte delle produzioni)
+  prodotti di laboratorio, come le aggiunte delle produzioni).
+  **RIFIN 51**: ogni riga ha la sua tendina u.m. e il PONTE
+  peso↔volume: un ingrediente registrato in lt ma pesato in grammi
+  (il latte si pesa, si sa) accetta la dose in g/kg se ha una DENSITÀ
+  dichiarata in anagrafica (500 g di latte a 1,03 → 0,485 lt scaricati);
+  senza densità il ponte è chiuso e il server risponde "non ammette
+  la u.m. ...": nessuna conversione implicita, la dose resta sempre
+  lì come l'ha scritta il pasticciere (`um_scritta`) mentre in banca
+  dati la quantità è CANONICA nell'u.m. dell'ingrediente
 - **Modifica**: stessa modale prefilled; le righe RIMPIAZZANO le vecchie
   (la ricetta è il master), le produzioni passate restano con il loro
   snapshot
@@ -343,7 +408,14 @@ la ricetta ora si crea e si corregge dall'interfaccia.
   resa, ingredienti con quantità, "Contiene:" con gli ALLERGENI
   CALCOLATI (l'ingrediente acquistato dichiara i suoi; il semilavorato
   EREDITA in ricorsione dalla sua ricetta: la crema porta latte e uova
-  nel bignè); il PROCEDIMENTO resta nell'app, fuori dal PDF. In cima,
+  nel bignè); la dose di ogni riga è quella SCRITTA in ricetta
+  (RIFIN 51: la riga "500 g" di un latte in litri stampa 500 g, la
+  grammatura resta quella del quaderno); il PROCEDIMENTO resta
+  nell'app, fuori dal PDF. Gli
+  ingredienti COMPOSTI (RIFIN 44: denominazione legale con le parti
+  separate da virgola) mostrano sotto la riga le loro PARTI appiattite
+  senza dose, deduplicate dentro la scheda (una parte uguale a un
+  ingrediente già in ricetta non si ripete). In cima,
   come nell'etichetta: il NOME DEL NEGOZIO in neretto (sezione
   Produttore), indirizzo e P.IVA, e la data di stampa. Le pagine
   arrivano da sole: la ricetta che non entra nel foglio rimanda intera
@@ -376,7 +448,11 @@ ricetta (qui NON si tocca, al massimo la si apre).
     SUBITO la ricetta; salvando, il prodotto compare in card. Famiglia in
     badge, allergeni EREDITATI dalla ricetta (calcolati, mai scritti a
     mano), sigla, n. produzioni; filtro per famiglia (badge
-    cliccabile, rimovibile con ✕)
+    cliccabile, rimovibile con ✕); **RIFIN 47**: in fondo alla card la
+    riga "⏳ N in attesa di ricetta" lista i CANDIDATI nati dal ➕ e mai
+    completati, con ✏ Completa (apre subito la modale ricetta: da
+    candidato a prodotto) e 🗑 Elimina (quella protetta: se nel frattempo
+    ha preso storia, il server rifiuta e spiega)
   - **🚚 Fornitori**: nome + P.IVA, n. arrivi
   - **🏷 Famiglie**: creazione inline, **rinomina inline ✏️ che si
     propaga ovunque** (tutto JOINa per id), conteggio prodotti cliccabile
@@ -402,8 +478,9 @@ ricetta (qui NON si tocca, al massimo la si apre).
   - *ingrediente*: nome, denominazione legale* (per l'etichetta dei
     prodotti finiti), marca abituale (default degli arrivi),
     conservazione*, i 14 allergeni come chips on/off (Reg. UE 1169/2011),
-    u.m., sigla, note + arrivi recenti cliccabili (saltano al dettaglio
-    del lotto, sezione Arrivi)
+    u.m., sigla, densità in g/ml facoltativa (RIFIN 51: serve al ponte
+    peso↔volume delle ricette, es. 1,03 per il latte), note + arrivi
+    recenti cliccabili (saltano al dettaglio del lotto, sezione Arrivi)
   - *prodotto di laboratorio*: nome, sigla, note; famiglia e
     allergeni READ-ONLY ereditati dalla ricetta ("se cambia la ricetta,
     cambiano qui") + bottoni **✏️ Modifica la ricetta / ➕ Crea la
@@ -413,10 +490,52 @@ ricetta (qui NON si tocca, al massimo la si apre).
     recenti
 - **+ Nuovo** per ingrediente, fornitore e prodotto di laboratorio
   (modale; per le famiglie riga inline). La denominazione legale è
-  suggerita già precompilata dal nome. Il prodotto di laboratorio nasce
+  suggerita già precompilata dal nome. **RIFIN 51**: anche la DENSITÀ è
+  suggerita per nome (latte 1,03, panna 1,00, olio 0,92, miele 1,40,
+  alcool 0,79, succo di arancia 1,045, succo di limone 1,03, latte di
+  mandorla 1,03, ...: il backend guarda le parole del nome, vince la più
+  lunga; endpoint `GET /api/anagrafiche/densita-suggerita?nome=`, il
+  campo resta libero e modificabile: la densità è dell'utente, non del
+  catalogo) e la si ritrova anche nella scheda ingrediente.
+  **RIFIN 53**: il collegamento è ancora più cortese: se alla creazione la
+  densità non si scrive (da questa modale, dal ➕ rapido di Arrivi o da
+  qualsiasi API), il backend la prende DA SOLO dalla tabella: "Latte" e
+  "Latte intero" nascono entrambi con la densità della voce della
+  tabella, il ponte g/kg della produzione funziona subito. Solo alla
+  CREAZIONE, però: nel salvataggio la scheda è maestra e una densità
+  tolta resta tolta.
+  **RIFIN 52**: il catalogo stesso è PERSONALIZZABILE col bottone
+  **💧 Densità tipiche** in card Ingredienti: la modale mostra le
+  predefinite (badge "catalogo", non si eliminano) e le voci tue
+  (✕), e aggiungerne una è parola + densità (ammette più parole:
+  "latte di riso" → 1,04). Le voci tue VINCONO sulle predefinite
+  (stessa parola = il tuo valore; aggiungere "caffe" a 0,98 batte il
+  predefinito 1,00), si sovrascrivono ripetendole e, tolte, il
+  predefinito torna a farsi vivo da solo (tabella `densita_custom`,
+  API `GET/POST/DELETE /api/anagrafiche/densita-custom`). Il prodotto di laboratorio nasce
   con la sua ricetta: la modale crea l'anagrafica e apre subito il form
-  ricetta; se si annulla, il prodotto resta un "candidato" visibile
-  solo dalla sezione Ricette finché non avrà la ricetta.
+  ricetta. **Un nome non resta mai intrappolato (RIFIN 45)**: se la
+  modale ricetta si annulla SUBITO DOPO un ➕, il candidato appena nato
+  (che non ha ancora ricetta, arrivi né produzioni) viene ELIMINATO al
+  volo; se resta un candidato orfano comunque (browser chiuso, ecc.),
+  la prossima creazione con lo stesso nome lo completa riusando la sua
+  riga, e un nome occupato da un'anagrafica vera viene rifiutato con un
+  messaggio che dice COS'È e in QUALE card trovarlo. Anche il ➕ del form
+  Produzioni è coperto (RIFIN 48): abbandonato il form produzione senza
+  aver scritto la ricetta, il candidato appena nato se ne va con
+  l'annulla (se la ricetta l'hai salvata, no: è diventato vero). Anche
+  la lista grezza `GET /prodotti` (che alimenta le tendine) classifica
+  per TIPO vero e non per famiglia (RIFIN 46): un candidato senza
+  ricetta NON finisce più tra gli ingredienti, nemmeno nei raw.
+  Il ➕ del form Produzioni ora porta SUBITO alla ricetta (RIFIN 49):
+  creato il prodotto, si apre da sé la modale ricetta puntata su di lui
+  (lo hai creato per produrlo, e senza ricetta non si produce: resa +
+  righe → salva → si torna al form con la proposta FEFO pronta);
+  annullando la modale resta la proposta col suo "➕ Crea la ricetta di
+  X ora", che ora compare anche per i candidati appena nati: la
+  proposta (`proponi_produzione`) distingue l'ingrediente VERO
+  (conservazione o arrivi: "è un ingrediente acquistato") dal prodotto
+  di laboratorio in attesa di ricetta ("non ha ancora una ricetta").
 - **Eliminazioni PROTETTE** (`app/logic/anagrafiche.py`): ingrediente con
   arrivi rifiutato, prodotto con arrivi/produzioni/ricetta rifiutato,
   fornitore con arrivi rifiutato. La tracciabilità non si riscrive.
