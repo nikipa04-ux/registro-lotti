@@ -35,12 +35,13 @@ def lista_arrivi(testo: str = "", fornitore_id: int = 0,
         "JOIN prodotti p ON p.id = li.prodotto_id "
         "JOIN fornitori f ON f.id = li.fornitore_id "
         "WHERE (? = '' OR LOWER(p.nome) LIKE ? OR LOWER(li.codice_lotto) LIKE ? "
-        "OR LOWER(f.nome) LIKE ? OR LOWER(COALESCE(li.marca, p.marca)) LIKE ?) "
+        "OR LOWER(f.nome) LIKE ? OR LOWER(COALESCE(li.marca, p.marca)) LIKE ? "
+        "OR LOWER(COALESCE(li.nota, '')) LIKE ?) "
         "AND (? = 0 OR li.fornitore_id = ?) "
         "AND (? = 0 OR li.prodotto_id = ?) "
         "ORDER BY li.data_arrivo DESC, li.id DESC"
     )
-    args = (testo, q, q, q, q, fornitore_id, fornitore_id, prodotto_id, prodotto_id)
+    args = (testo, q, q, q, q, q, fornitore_id, fornitore_id, prodotto_id, prodotto_id)
     with connessione() as conn:
         righe = [dict(r) for r in conn.execute(sql, args).fetchall()]
     n_totale = len(righe)
@@ -104,6 +105,7 @@ class NuovoArrivo(BaseModel):
     marca: str | None = None
     prezzo_unitario: float | None = None
     iva: float | None = None
+    nota: str | None = None   # RIFIN 55: descrittiva di questa consegna
 
 
 @router.post("", status_code=201)

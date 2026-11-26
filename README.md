@@ -161,12 +161,19 @@ La sezione con cui si registra tutto ciò che entra:
   allergeni a chip, già selezionabili; RIFIN 53: anche la DENSITÀ g/ml
   suggerita dal nome come nella modale grande, e se resta vuota il
   backend la eredita da solo dalla tabella Densità tipiche) e resta
-  selezionato. Date, quantità, prezzo e IVA facoltativi.
+  selezionato. Date, quantità, prezzo e IVA facoltativi. C'è anche la
+  **nota di prodotto** (facoltativa, RIFIN 55): descrive QUESTA consegna
+  (es. "RENO X", "confezione da 5 kg, granulometria fine, consegna in
+  ritardo"), diversa dalle note dell'ingrediente in anagrafica; compare nel
+  dettaglio del lotto in Arrivi e in Magazzino, NON nell'etichetta PDF, e
+  la barra di ricerca degli arrivi la setta insieme a prodotto, marca,
+  lotto e fornitore.
 
 Le regole di registrazione vivono nel server (`app/logic/arrivi.py`):
 residua = quantità in partenza, un prodotto di laboratorio non può "arrivare"
 (nasce da una produzione), la scadenza non può precedere l'arrivo, lotto
-duplicato per lo stesso fornitore respinto. Il form mostra i messaggi
+duplicato per lo stesso fornitore respinto, la nota consegna si salva
+ripulita degli spazi (vuota = nessuna nota). Il form mostra i messaggi
 d'errore del server così come sono.
 
 **Eliminazione PROTETTA** (`DELETE /api/arrivi/{arrivo_id}`): un lotto già

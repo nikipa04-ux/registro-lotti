@@ -86,6 +86,10 @@ CREATE TABLE IF NOT EXISTS lotti_ingresso (
                                      -- dell'azzeramento: serve al ripristino
     prezzo_unitario REAL,           -- costo d'acquisto per u.m. (lo storico prezzi nasce qui)
     iva REAL,                       -- aliquota %: i totali sono CALCOLATI, non memorizzati
+    nota TEXT,                      -- RIFIN 55: nota descrittiva di QUESTA consegna
+                                     -- (confezione, granulometria, provenienza...):
+                                     -- il prodotto ha le sue note in anagrafica,
+                                     -- questa racconta il lotto davanti agli occhi
     UNIQUE (prodotto_id, codice_lotto, fornitore_id)
 );
 

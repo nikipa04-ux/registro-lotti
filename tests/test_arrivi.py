@@ -55,6 +55,18 @@ def test_marca_del_lotto_vince_sul_default(conn):
     assert lotto["marca"] == "Altri Marchi"
 
 
+def test_nota_della_consegna_ritornata_una_volta_salvata(conn):
+    lotto = registra_arrivo(conn, arrivo(nota="  confezione da 5 kg, granulometria fine  "))
+    assert lotto["nota"] == "confezione da 5 kg, granulometria fine"
+
+
+def test_senza_nota_il_campo_resta_vuoto(conn):
+    lotto = registra_arrivo(conn, arrivo())
+    assert lotto["nota"] is None
+    lotto_spoglia = registra_arrivo(conn, arrivo(codice_lotto="L2607B", nota="   "))
+    assert lotto_spoglia["nota"] is None
+
+
 def test_duplicato_respinto(conn):
     registra_arrivo(conn, arrivo())
     with pytest.raises(ErroreArrivo):

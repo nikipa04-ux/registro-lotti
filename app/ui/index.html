@@ -171,7 +171,7 @@
 
       <div class="toolbar filtri">
         <input id="cerca-arrivi" type="search"
-               placeholder="Cerca prodotto, marca, lotto, fornitore…">
+               placeholder="Cerca prodotto, marca, lotto, fornitore, nota…">
         <select id="fil-fornitore"><option value="0">Tutti i fornitori</option></select>
         <select id="fil-ingrediente"><option value="0">Tutti gli ingredienti</option></select>
         <select id="fil-scadenza">
@@ -451,6 +451,15 @@
         <label for="na-iva">IVA % (facoltativa)</label>
         <input id="na-iva" type="number" step="1" min="0" max="100">
       </div>
+    </div>
+
+    <div class="f-campo">
+      <label for="na-nota">Nota di prodotto (facoltativa)</label>
+      <input id="na-nota" type="text" autocomplete="off"
+             placeholder="es. RENO X, confezione da 5 kg, granulometria fine">
+      <div class="hint">Descrive QUESTA consegna (qualità, confezione, aspetto):
+        la cerchi poi anche dalla barra di ricerca. Le note generali
+        dell'ingrediente stanno nella sua scheda in Anagrafiche.</div>
     </div>
 
     <div class="f-errore" id="na-errore" hidden></div>

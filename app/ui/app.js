@@ -222,6 +222,7 @@ async function apriDettaglioArrivo(id) {
       "<div class='det-riga'><span>Prodotto</span><b>" + esc(l.prodotto) +
       (l.marca_effettiva ? " · " + esc(l.marca_effettiva) : "") + "</b></div>" +
       "<div class='det-riga'><span>Fornitore</span><b>" + esc(l.fornitore) + "</b></div>" +
+      (l.nota ? "<div class='det-riga'><span>Nota</span><b>" + esc(l.nota) + "</b></div>" : "") +
       "<div class='det-riga'><span>Lotto fornitore</span><b class='mono'>" + esc(l.codice_lotto) + "</b></div>" +
       "<div class='det-riga'><span>Arrivo</span><b>" + esc(l.data_arrivo) + "</b></div>" +
       "<div class='det-riga'><span>Scadenza</span><b>" + esc(l.data_scadenza) +
@@ -359,7 +360,7 @@ function apriFormArrivo() {
   $("hint-prod").hidden = true;
   $("na-um").textContent = "";
   $("na-arrivo").value = OGGI;      // default: oggi, come lo vede il server
-  ["na-scadenza", "na-quantita", "na-prezzo", "na-iva"].forEach(id => $(id).value = "");
+  ["na-scadenza", "na-quantita", "na-prezzo", "na-iva", "na-nota"].forEach(id => $(id).value = "");
   $("na-prodotto").focus();
 }
 
@@ -562,6 +563,7 @@ async function salvaArrivo() {
         marca: $("na-marca").value.trim() || null,
         prezzo_unitario: $("na-prezzo").value === "" ? null : Number($("na-prezzo").value),
         iva: $("na-iva").value === "" ? null : Number($("na-iva").value),
+        nota: $("na-nota").value.trim() || null,
       }),
     });
     const corpo = await risposta.json();
@@ -987,6 +989,7 @@ async function apriSchedaLottoMagazzino(id, daEsauriti = false) {
       "<div class='det-riga'><span>Prodotto</span><b>" + esc(l.prodotto) +
       (l.marca_effettiva ? " · " + esc(l.marca_effettiva) : "") + "</b></div>" +
       "<div class='det-riga'><span>Fornitore</span><b>" + esc(l.fornitore) + "</b></div>" +
+      (l.nota ? "<div class='det-riga'><span>Nota</span><b>" + esc(l.nota) + "</b></div>" : "") +
       "<div class='det-riga'><span>Lotto fornitore</span><b class='mono'>" + esc(l.codice_lotto) + "</b></div>" +
       "<div class='det-riga'><span>Arrivo</span><b>" + esc(l.data_arrivo) + "</b></div>" +
       "<div class='det-riga'><span>Scadenza</span><b>" + esc(l.data_scadenza) +

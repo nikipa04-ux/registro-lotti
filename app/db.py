@@ -47,6 +47,7 @@ def inizializza(db_path=None):
     garantisci_colonna(conn, "lotti_interni", "um_prodotta", "TEXT")
     garantisci_colonna(conn, "lotti_ingresso", "data_esaurimento", "TEXT")
     garantisci_colonna(conn, "lotti_ingresso", "residua_pre_azzeramento", "REAL")
+    garantisci_colonna(conn, "lotti_ingresso", "nota", "TEXT")
     garantisci_colonna(conn, "prodotti", "densita", "REAL")
     garantisci_colonna(conn, "ricette_righe", "um_scritta", "TEXT")
     popola_unita_misura(conn)

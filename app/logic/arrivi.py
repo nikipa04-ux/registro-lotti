@@ -27,7 +27,8 @@ def registra_arrivo(conn, dati):
     """Valida e registra un lotto in ingresso, immettendolo in magazzino.
 
     dati: dict con prodotto_id, fornitore_id, codice_lotto, data_arrivo,
-          data_scadenza (ISO), quantita; facoltativi marca, prezzo_unitario, iva.
+          data_scadenza (ISO), quantita; facoltativi marca, prezzo_unitario,
+          iva, nota (descrittiva di QUESTA consegna, RIFIN 55).
     Ritorna il dict della riga inserita (con nome prodotto, um e fornitore).
     Solleva ErroreArrivo con messaggio pronto per l'utente se l'input è respinto.
     """
@@ -85,10 +86,11 @@ def registra_arrivo(conn, dati):
     cur = conn.execute(
         "INSERT INTO lotti_ingresso "
         "(prodotto_id, fornitore_id, marca, codice_lotto, data_arrivo, "
-        " data_scadenza, quantita, quantita_residua, prezzo_unitario, iva) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " data_scadenza, quantita, quantita_residua, prezzo_unitario, iva, nota) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (prodotto_id, fornitore_id, marca, codice, data_arrivo, data_scadenza,
-         quantita, quantita, dati.get("prezzo_unitario"), dati.get("iva")),
+         quantita, quantita, dati.get("prezzo_unitario"), dati.get("iva"),
+         (dati.get("nota") or "").strip() or None),
     )
     riga = conn.execute(
         "SELECT li.*, p.nome AS prodotto, p.unita_misura AS um, f.nome AS fornitore "
