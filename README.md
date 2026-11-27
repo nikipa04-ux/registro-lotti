@@ -580,6 +580,12 @@ una tabella `impostazioni` chiave/valore che crescerà con le esigenze
 - **Card "La mia attività"**: ragione sociale + indirizzo + P.IVA
   (facoltativi), salvataggio immediato (`PUT /api/impostazioni`,
   GET per leggerli)
+- **Card "💾 Backup del database"** (RIFIN 59): bottone che scarica una
+  copia COMPLETA e COERENTE del registro (`GET /api/impostazioni/backup`,
+  nome `registro-lotti-backup-AAAA-MM-GG.db`): l'endpoint usa l'API di
+  backup di SQLite, quindi la copia è valida anche a server acceso.
+  Da mettere su chiavetta o cloud; per ripristinarla: chiudi il server,
+  sostituisci il file in `data/` (tieni una copia del vecchio), riavvia
 - **Anteprima dal vivo dell'etichetta**: una cella uguale a quella che
   esce dal PDF (bordo tratteggiato = guida di taglio, monocromatica);
   mentre scrivi ragione sociale, indirizzo e P.IVA si aggiornano al

@@ -3778,6 +3778,15 @@ async function avviaProduttore() {
   aggiornaAnteprimaProduttore();
 }
 
+// RIFIN 59: il bottone è un <a href> all'endpoint del backup: il browser
+// scarica il file da solo; qui si dà solo la conferma visiva che è partito
+$("backup-scarica").addEventListener("click", () => {
+  const b = $("backup-scarica");
+  const testo = b.textContent;
+  b.textContent = "⏳ download del backup avviato…";
+  setTimeout(() => { b.textContent = testo; }, 4000);
+});
+
 function aggiornaAnteprimaProduttore() {
   const ragione = $("prod-ragione").value.trim();
   const indirizzo = $("prod-indirizzo").value.trim();

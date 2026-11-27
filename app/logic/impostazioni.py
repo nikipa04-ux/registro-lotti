@@ -11,6 +11,8 @@ Nessun dato calcolato: si legge, si salva, si mette in etichetta.
 Se sono vuoti l'etichetta semplicemente non porta le righe del
 produttore (la cella resta quella che è).
 """
+import sqlite3
+from datetime import date
 
 CHIAVE_RAGIONE = "produttore_ragione_sociale"
 CHIAVE_INDIRIZZO = "produttore_indirizzo"
@@ -58,3 +60,21 @@ def salva_produttore(conn, ragione_sociale, indirizzo, piva=""):
     _scrivi(conn, CHIAVE_INDIRIZZO, indirizzo)
     _scrivi(conn, CHIAVE_PIVA, piva)
     return leggi_produttore(conn)
+
+
+def esporta_backup(conn):
+    """Copia completa e COERENTE del database (RIFIN 59).
+
+    Usa l'API di backup di SQLite (conn.backup su una copia in memoria
+    poi serializzata): la copia è consistente anche mentre il server
+    gira e altre richieste scrivono, a differenza di un copia-incolla
+    del file fatto a mano (che rischierebbe di prendere metà transazione).
+    Restituisce (nome, bytes): il nome porta la data del giorno, i bytes
+    sono il database intero, riapribile col programma stesso.
+    """
+    copia = sqlite3.connect(":memory:")
+    conn.backup(copia)
+    dati = copia.serialize()
+    copia.close()
+    nome = f"registro-lotti-backup-{date.today().isoformat()}.db"
+    return nome, bytes(dati)
