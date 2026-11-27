@@ -81,6 +81,8 @@ def crea_prodotto_lab(dati: NuovoProdottoLab):
 class RigaRicetta(BaseModel):
     ingrediente_id: int
     quantita: float
+    facoltativa: bool = False   # RIFIN 56: riga semilavorato facoltativo, usata solo in
+                               # alcune produzioni
 
 
 class RicettaIn(BaseModel):

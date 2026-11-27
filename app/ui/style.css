@@ -207,6 +207,18 @@ th.num, td.num { text-align: right; }
 
 .modal.largo { width: 880px; min-height: min(740px, calc(100vh - 40px)); }
 
+/* RIFIN 57: "Nuovo ingrediente" più LARGO e caselle ALLINEATE: griglia a
+   4 colonne fisse (prima la riga con 5 campi mischiava larghezze diverse,
+   ogni casella era strettissima e il bottone "Crea ingrediente" finiva
+   sotto lo schermo). Gli span allineano le caselle in colonna:
+   nome/denominazione (2+2), poi conservazione/u.m./sigla/marco su UNA
+   riga da 4, densità + note (1+3), allergeni a tutta larghezza */
+.modal.anag { width: 920px; }
+.anag-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 14px; }
+.anag-grid .span2 { grid-column: span 2; }
+.anag-grid .span3 { grid-column: span 3; }
+.anag-grid .span4 { grid-column: span 4; }
+
 /* Nuova produzione: la più LARGA di tutte (la proposta FEFO e i campi
    della prima riga guadagnano spazio orizzontale). La prima riga ha la
    sua CLASSE (np-testata): i selettori del tipo .f-row:first-of-type NON

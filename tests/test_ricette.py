@@ -117,6 +117,21 @@ def test_salvata_la_ricetta_il_prodotto_e_producibile(conn):
     assert len(p["righe"]) == 2
 
 
+def test_semilavorato_facoltativo_salvato_e_ritornato(conn):
+    # RIFIN 56: il semilavorato facoltativo (riga facoltativa) si salva e si
+    # dettaglio e nella proposta: il resto delle righe resta obbligatorio
+    salva_ricetta(conn, _bigne(righe=[
+        {"ingrediente_id": 1, "quantita": 2},
+        {"ingrediente_id": 2, "quantita": 0.5, "facoltativa": True},
+    ]))
+    d = dettaglio_ricetta(conn, 3)
+    far = {r["nome"]: r["facoltativa"] for r in d["righe"]}
+    assert far == {"Latte intero": 0, "Uova pastorizzate": 1}
+    # ritrova nel dettaglio; la proposta FEFO lo porta al form produzione
+    p = proponi_produzione(conn, 3)
+    assert [r["facoltativa"] for r in p["righe"]] == [False, True]
+
+
 def test_resa_scrive_um_canonica_del_prodotto(conn):
     """RIFIN 50: la resa NOMINA l'u.m. canonica ('5 kg' -> kg), come la
     ricetta nomina la famiglia. Il prodotto nato dal ➕ non ce l'ha: senza

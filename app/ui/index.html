@@ -624,22 +624,23 @@
 </div>
 
 <!-- ================= NUOVO INGREDIENTE (anagrafiche) ================= -->
+<!-- RIFIN 57: modale più larga e caselle ALLINEATE A COLONNE (griglia a 4):
+     prima la riga dei 5 campi mischiava larghezze diverse e il bottone
+     "Crea ingrediente" finiva sotto lo schermo -->
 <div class="overlay" id="overlay-anag-ing" hidden>
-  <div class="modal">
+  <div class="modal anag">
     <h2>Nuovo ingrediente</h2>
     <p class="sub">I dati dell'anagrafica nascono qui: negli arrivi non si richiedono più.</p>
-    <div class="f-row">
-      <div class="f-campo">
+    <div class="anag-grid">
+      <div class="f-campo span2">
         <label for="nai-nome">Nome <span class="req">*</span></label>
         <input id="nai-nome" type="text" placeholder="es. Farina 00" autocomplete="off">
       </div>
-      <div class="f-campo">
+      <div class="f-campo span2">
         <label for="nai-denom">Denominazione legale <span class="req">*</span></label>
         <input id="nai-denom" type="text" placeholder="come sull'etichetta d'acquisto" autocomplete="off">
         <div class="hint">La dicitura dell'etichetta d'acquisto: finisce nell'etichetta dei prodotti finiti (es. farina 00 → «Farina di grano tenero tipo 00»).</div>
       </div>
-    </div>
-    <div class="f-row">
       <div class="f-campo">
         <label for="nai-cons">Conservazione <span class="req">*</span></label>
         <select id="nai-cons">
@@ -665,15 +666,20 @@
         <input id="nai-densita" type="number" step="0.001" min="0" placeholder="es. 1,03" autocomplete="off">
         <div class="hint" id="nai-densita-hint">Il ponte peso↔volume: con la densità puoi scrivere i grammi anche su un liquido in litri (500 g di latte = 0,485 lt nello scarico). Trucco da banco: pesa 100 ml, i grammi letti SONO la densità.</div>
       </div>
-    </div>
-    <div class="f-campo">
-      <label>Allergeni <span class="muted">(clic per attivare/disattivare)</span></label>
-      <div id="nai-chips" class="chips"></div>
-      <div class="hint">I 14 allergeni obbligatori da etichetta (Reg. UE 1169/2011). I prodotti di laboratorio li ereditano dalla ricetta.</div>
-    </div>
-    <div class="f-campo">
-      <label for="nai-note">Note (facoltative)</label>
-      <input id="nai-note" type="text">
+      <div class="f-campo">
+        <label for="nai-semil">Semilavorato</label>
+        <input type="checkbox" id="nai-semil" style="width:auto;transform:scale(1.4);margin-top:4px">
+        <div class="hint">Ingrediente acquistato che è già un semilavorato (es. crema al pistacchio). Solo indicazione: in ricetta entra come tutti gli altri ingredienti.</div>
+      </div>
+      <div class="f-campo span2">
+        <label for="nai-note">Note (facoltative)</label>
+        <input id="nai-note" type="text">
+      </div>
+      <div class="f-campo span4">
+        <label>Allergeni <span class="muted">(clic per attivare/disattivare)</span></label>
+        <div id="nai-chips" class="chips"></div>
+        <div class="hint">I 14 allergeni obbligatori da etichetta (Reg. UE 1169/2011). I prodotti di laboratorio li ereditano dalla ricetta.</div>
+      </div>
     </div>
     <div id="nai-errore" class="f-errore" hidden></div>
     <div class="f-azioni">

@@ -58,6 +58,11 @@ CREATE TABLE IF NOT EXISTS prodotti (
                                     -- il ponte peso<->volume (RIFIN 51). Opzionale e
                                     -- SEMPRE dell'utente: l'app al massimo SUGGERISCE
                                     -- un valore tipico in base al nome alla creazione
+    semilavorato INTEGER NOT NULL DEFAULT 0,  -- RIFIN 58: ingrediente acquistato che
+                                    -- è un semilavorato (crema al pistacchio, creme
+                                    -- di farcitura): SOLO dichiarativo, badge in
+                                    -- Anagrafiche; in ricetta entra come TUTTI gli
+                                    -- altri ingredienti (nessuna auto-casella)
     note TEXT
 );
 
@@ -149,6 +154,10 @@ CREATE TABLE IF NOT EXISTS ricette_righe (
     um_scritta TEXT,                -- come l'utente HA SCRITTO la dose ('g': 500 g di
                                     -- latte restano 0,485 lt canonici ma il libro ricette
                                     -- e le tendine mostrano i grammi). NULL = canonica
+    facoltativa INTEGER NOT NULL DEFAULT 0,  -- RIFIN 56: riga SEMILAVORATO FACOLTATIVO (crema al
+                                    -- pistacchio nelle brioches): si usa SOLO nelle
+                                    -- produzioni che la prevedono; escluderla dal
+                                    -- verbale NON marca «ricetta modificata»
     UNIQUE (ricetta_id, ingrediente_id)
 );
 

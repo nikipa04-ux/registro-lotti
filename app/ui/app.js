@@ -1594,8 +1594,11 @@ function renderRighe() {
   let html = "";
   // Live: il verbale sta divergendo dalla ricetta master? Le quantità
   // corrette non contano, contano gli ingredienti aggiunti/esclusi.
+  // RIFIN 56: escludere un SEMILAVORATO FACOLTATIVO NON è una
+  // divergenza: variare il semilavorato facoltativo è previsto, non conta qui.
   const nAggiunte = RIGHE.filter(r => r.fonte === "aggiunta" && r.nome).length;
-  const nEscluse = (PROPOSTA.righe || []).filter((_, i) => !RIGHE[i] || !RIGHE[i].attiva).length;
+  const nEscluse = (PROPOSTA.righe || []).filter((pr, i) =>
+    !pr.facoltativa && (!RIGHE[i] || !RIGHE[i].attiva)).length;
   if (nAggiunte + nEscluse > 0)
     html += '<div class="warn" style="margin:0 0 10px">✏️ Verbale diverso dalla ricetta master (' +
       nAggiunte + " aggiunto/i, " + nEscluse +
@@ -1613,6 +1616,7 @@ function renderRighe() {
       '<input type="number" step="0.001" min="0" value="' + qtaVista(riga) + '" data-qta="' + i + '" class="qta-input">' +
       '<b>' + esc(r.nome) + '</b> ' + selUmRiga(i, riga) +
       (r.famiglia ? ' <span class="badge b-gray">' + esc(r.famiglia) + "</span>" : "") +
+      (r.facoltativa ? ' <span class="badge b-amber" title="Semilavorato facoltativo: ✕ qui non lo usa, senza che il verbale risulti modificato">semilavorato</span>' : "") +
       '<span class="muted">da ricetta: ' + fmt(r.qta_ricetta) + "</span>" +
       '<button class="btn sec mini" data-assegna="' + i + '" title="Scegli tu quali lotti usare (e quanto da ciascuno), oppure registra al volo un lotto non in elenco">⚖ Assegna lotti</button>' +
       '<button class="btn sec mini rosso" data-escludi="' + i + '" title="Escludi questa riga solo per questa produzione">✕</button>' +
@@ -2185,6 +2189,7 @@ async function apriDettaglioRicetta(prodotto_id) {
     const righe = dati.righe.map(r =>
       "<div class='det-riga'><span>" + esc(r.nome) +
       (r.famiglia_ingrediente ? ' <span class="badge b-gray">' + esc(r.famiglia_ingrediente) + "</span>" : "") +
+      (r.facoltativa ? ' <span class="badge b-amber">semilavorato</span>' : "") +
       "</span><b>" + fmt(r.quantita) + " " + esc(r.um || "") + "</b></div>").join("");
     $("dettaglio-ricetta-testo").innerHTML =
       "<div class='det-riga'><span>Prodotto</span><b>" + esc(dati.prodotto.nome) +
@@ -2271,6 +2276,7 @@ function apriFormRicetta(dati) {
       um: r.um, umSel: r.um_scritta || r.um,   // RIFIN 51: come l'avevi scritta
       densita: r.densita || null,
       qta: r.quantita,
+      far: !!r.facoltativa,   // RIFIN 56: riga semilavorato facoltativo
     }));
     $("nr-hint").hidden = true;
   } else {
@@ -2309,7 +2315,7 @@ function eliminaCandidatoAbbandonato(id) {
 }
 
 function aggiungiRigaR() {
-  RIGHE_R.push({ ingrediente_id: null, nome: null, um: "", umSel: null, densita: null, qta: 0 });
+  RIGHE_R.push({ ingrediente_id: null, nome: null, um: "", umSel: null, densita: null, qta: 0, far: false });
   renderRigheRicette();
 }
 
@@ -2336,6 +2342,11 @@ function renderRigheRicette() {
         : sel) +
       '<input type="number" step="0.001" min="0" value="' + qtaVista(r) +
       '" data-rqta="' + i + '" class="qta-input" placeholder="q.tà">' +
+      // RIFIN 56: la casella semilavorato: riga facoltativa, si usa solo
+      // nelle produzioni che la prevedono (brioche base + ripieno che varia)
+      '<label class="muted" style="white-space:nowrap" title="Semilavorato facoltativo: si consuma solo nelle produzioni che lo usano">' +
+      '<input type="checkbox" data-rfar="' + i + '"' + (r.far ? " checked" : "") +
+      "> semilavorato</label>" +
       '<button class="btn sec mini rosso" data-rdel="' + i + '" title="Rimuovi riga">✕</button>' +
       "</div></div>";
   });
@@ -2360,6 +2371,10 @@ function renderRigheRicette() {
       // la salva il backend, che converte di nuovo come qui (um.py)
       const f = r.umSel && r.umSel !== r.um ? fattoreRiga(r.umSel, r.um, r.densita) || 1 : 1;
       r.qta = (Number(inp.value) || 0) * f;
+    }));
+  cont.querySelectorAll("[data-rfar]").forEach(chk =>
+    chk.addEventListener("change", () => {
+      RIGHE_R[Number(chk.dataset.rfar)].far = chk.checked;   // RIFIN 56
     }));
   cont.querySelectorAll("[data-rum]").forEach(sel =>
     sel.addEventListener("change", () => {
@@ -2408,6 +2423,7 @@ async function salvaRicetta() {
           // RIFIN 51: come l'hai scritta ('500' + 'g'): il backend converte
           // e la conserva, il laboratorio la ritrova nel libro ricette
           um: r.umSel && r.umSel !== r.um ? r.umSel : null,
+          facoltativa: r.far || null,   // RIFIN 56: riga semilavorato facoltativo
         })),
       }),
     });
@@ -2702,6 +2718,7 @@ async function caricaIngredientiAnag() {
       ? "<table><tr><th>Nome</th><th>Marca</th><th>Conservazione</th><th>Allergeni</th><th>U.m.</th><th>Sigla</th><th>Arrivi</th></tr>" +
         righe.map(p =>
           '<tr data-id="' + p.id + '"><td><b>' + esc(p.nome) + "</b>" +
+          (p.semilavorato ? ' <span class="badge b-amber">semilavorato</span>' : "") +
           (p.denominazione_legale
             ? '<div class="muted" style="font-size:11px">' + esc(p.denominazione_legale) + "</div>"
             : "") + "</td>" +
@@ -3144,7 +3161,8 @@ async function apriDettaglioFornitore(id) {
 function renderSchedaIngrediente(d) {
   ANAG_ATTIVI = new Set(d.allergeni.map(a => a.id));
   $("dettaglio-anagrafica-testo").innerHTML =
-    "<h2 style='margin:0 0 6px'>🛒 " + esc(d.nome) + ' <span class="badge b-gray">ingrediente</span></h2>' +
+    "<h2 style='margin:0 0 6px'>🛒 " + esc(d.nome) + ' <span class="badge b-gray">ingrediente</span>' +
+    (d.semilavorato ? ' <span class="badge b-amber">semilavorato</span>' : "") + "</h2>" +
     "<div class='form-grid'>" +
     "<div><label>Nome *</label><input id='anag-nome' value='" + esc(d.nome) + "'></div>" +
     "<div><label>Denominazione legale *</label><input id='anag-denom' value='" + esc(d.denominazione_legale || "") + "'>" +
@@ -3155,6 +3173,8 @@ function renderSchedaIngrediente(d) {
     "<div><label>Densità g/ml (liquidi)</label><input id='anag-densita' type='number' step='0.001' min='0' value='" + (d.densita || "") + "' placeholder='es. 1,03'>" +
     "<div class='hint'>RIFIN 51: col la densità dichiarata puoi scrivere i grammi anche su un liquido in litri.</div></div>" +
     "<div><label>Sigla (per i lotti in arrivo)</label><input id='anag-sigla' class='mono' value='" + esc(d.sigla || "") + "'></div>" +
+    "<div><label>Semilavorato</label><input type='checkbox' id='anag-semil'" + (d.semilavorato ? " checked" : "") + " style='width:auto;transform:scale(1.4);margin-top:6px'>" +
+    "<div class='hint'>Ingrediente acquistato che è già un semilavorato: in ricetta entra come tutti gli altri.</div></div>" +
     "<div class='full'><label>Note</label><input id='anag-note' value='" + esc(d.note || "") + "'></div>" +
     "<div class='full'><label>Allergeni <span class='muted'>(clic per attivare/disattivare)</span></label>" +
     "<div id='anag-chips' class='chips'></div>" +
@@ -3176,6 +3196,7 @@ function renderSchedaIngrediente(d) {
       conservazione: $("anag-cons").value,
       unita_misura: $("anag-um").value.trim(),
       densita: $("anag-densita").value === "" ? null : Number($("anag-densita").value),
+      semilavorato: $("anag-semil").checked,   // RIFIN 58
       sigla: $("anag-sigla").value.trim(),
       note: $("anag-note").value.trim(),
       allergeni: [...ANAG_ATTIVI],
@@ -3402,6 +3423,7 @@ document.addEventListener("keydown", (e) => {
 $("anag-nuovo-ing").addEventListener("click", () => {
   ["nai-nome", "nai-denom", "nai-um", "nai-sigla", "nai-marca", "nai-note", "nai-densita"].forEach(i => $(i).value = "");
   $("nai-cons").value = "Frigo";
+  $("nai-semil").checked = false;   // RIFIN 58
   NAI_ATTIVI = new Set();
   NAI_DENOM_AUTO = true;
   NAI_DENS_AUTO = true;
@@ -3562,6 +3584,7 @@ $("nai-salva").addEventListener("click", async () => {
         unita_misura: $("nai-um").value.trim(),
         sigla: $("nai-sigla").value.trim() || null,
         densita: $("nai-densita").value === "" ? null : Number($("nai-densita").value),
+        semilavorato: $("nai-semil").checked,   // RIFIN 58
         note: $("nai-note").value.trim() || null,
         allergeni: [...NAI_ATTIVI],
       }),

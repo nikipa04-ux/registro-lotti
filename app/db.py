@@ -49,7 +49,11 @@ def inizializza(db_path=None):
     garantisci_colonna(conn, "lotti_ingresso", "residua_pre_azzeramento", "REAL")
     garantisci_colonna(conn, "lotti_ingresso", "nota", "TEXT")
     garantisci_colonna(conn, "prodotti", "densita", "REAL")
+    garantisci_colonna(conn, "prodotti", "semilavorato",
+                       "INTEGER NOT NULL DEFAULT 0")   # RIFIN 58: ingrediente semilavorato
     garantisci_colonna(conn, "ricette_righe", "um_scritta", "TEXT")
+    garantisci_colonna(conn, "ricette_righe", "facoltativa",
+                       "INTEGER NOT NULL DEFAULT 0")   # RIFIN 56: righe semilavorato facoltative
     popola_unita_misura(conn)
     conn.commit()
     return conn

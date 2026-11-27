@@ -260,10 +260,13 @@ La produzione è SLAVE della ricetta MASTER: la proposta parte dalle righe
 della ricetta, l'operatore al massimo corregge.
 
 - **Ricetta modificata**: se il verbale usa un insieme di ingredienti DIVERSO
-  dalla ricetta master (uno aggiunto o una riga esclusa; le quantità corrette
-  non contano), il form lo dice subito e il lotto interno resta marcato
-  «✏️ ricetta modificata» in lista e dettaglio (snapshot al verbale: la
-  ricetta può cambiare dopo, il lotto dice com'è andata quel giorno)
+  dalla ricetta master (uno aggiunto o una riga obbligatoria esclusa; le
+  quantità corrette non contano), il form lo dice subito e il lotto interno
+  resta marcato «✏️ ricetta modificata» in lista e dettaglio (snapshot al
+  verbale: la ricetta può cambiare dopo, il lotto dice com'è andata quel
+  giorno). **RIFIN 56**: le righe SEMILAVORATO FACOLTATIVE (es. crema al
+  pistacchio nelle brioches a ricetta unica) NON contano qui:
+  usarle o escluderle con il solito ✕ è previsto, il verbale resta pulito
 - **Ricerca** per prodotto o lotto interno + contatore; tabella demo:
   prodotto + famiglia in badge, lotto mono, data produzione, scadenza
   colorata, "N lotti usati"
@@ -379,6 +382,16 @@ la ricetta ora si crea e si corregge dall'interfaccia.
   badge, resa, numero ingredienti, presenza del procedimento), riga
   cliccabile → dettaglio con righe complete (con badge famiglia
   dell'ingrediente), resa, sigla del lotto e procedimento
+- **RIFIN 56, semilavorati facoltativi**: nella modale ogni riga ha la
+  casella "semilavorato": la riga diventa FACOLTATIVA (crema al pistacchio
+  delle brioches, che hanno UNA ricetta e il semilavorato che varia). Nel
+  dettaglio e nel form produzione porta il badge "semilavorato": alla
+  produzione lo usi o lo escludi col ✕ come tutte le altre righe, ma senza
+  marcare il verbale «ricetta modificata»; nel libro ricette PDF compare
+  come le altre righe con scritta "(facoltativa)" e le parti della
+  denominazione legale sotto; l'etichetta HACCP si calcola sempre dai
+  consumi veri del verbale, quindi il lotto dichiara SOLO i semilavorati
+  davvero usati
 - **Nuova ricetta** (modale): prodotto = combobox typeahead su tutta
   l'anagrafica esistente in quel momento (nessun suggerimento automatico
   e nessuna lista speciale: se non c'è, lo si crea con "➕ Crea", nome +
@@ -497,7 +510,12 @@ ricetta (qui NON si tocca, al massimo la si apre).
     recenti
 - **+ Nuovo** per ingrediente, fornitore e prodotto di laboratorio
   (modale; per le famiglie riga inline). La denominazione legale è
-  suggerita già precompilata dal nome. **RIFIN 51**: anche la DENSITÀ è
+  suggerita già precompilata dal nome. **RIFIN 58**: casella
+  **Semilavorato** (es. crema al pistacchio comprata): SOLO dichiarativa,
+  badge ambra nella tabella Ingredienti e nella scheda; in ricetta
+  l'ingrediente entra come TUTTI gli altri (nessuna casella auto-spuntata,
+  la facoltativa riga per riga resta manuale). **RIFIN 51**: anche la
+  DENSITÀ è
   suggerita per nome (latte 1,03, panna 1,00, olio 0,92, miele 1,40,
   alcool 0,79, succo di arancia 1,045, succo di limone 1,03, latte di
   mandorla 1,03, ...: il backend guarda le parole del nome, vince la più

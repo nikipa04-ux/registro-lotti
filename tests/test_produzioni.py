@@ -216,6 +216,45 @@ def test_secondo_lotto_stesso_giorno_progressivo(conn):
     assert lotto2["codice_lotto"] == "CRP-20261116-02"
 
 
+# ---- RIFIN 56: semilavorati facoltativi e snapshot «ricetta modificata» ----
+# la crema ha una riga OBLIGATORIA (latte, ricetta 10) più una riga
+# SEMILAVORATO FACOLTATIVO (uova): variarlo è previsto per natura
+
+def _semilavorato_uova(conn):
+    conn.execute(
+        "INSERT INTO ricette_righe (ricetta_id, ingrediente_id, quantita, facoltativa) "
+        "VALUES (10, 2, 1, 1)"
+    )
+    conn.commit()
+
+
+def test_produzione_senza_semilavorato_non_marca_ricetta_modificata(conn):
+    _semilavorato_uova(conn)   # la ricetta ha anche le uova, ma NON le uso
+    lotto = registra_produzione(conn, produzione_crema())
+    assert lotto["ricetta_modificata"] == 0
+
+
+def test_produzione_con_semilavorato_usato_non_marca_ricetta_modificata(conn):
+    _semilavorato_uova(conn)
+    lotto = registra_produzione(conn, produzione_crema(
+        consumi=[
+            {"origine": "ingresso", "lotto_origine_id": 100, "quantita_usata": 1.5},
+            {"origine": "ingresso", "lotto_origine_id": 101, "quantita_usata": 0.5},
+            {"origine": "ingresso", "lotto_origine_id": 102, "quantita_usata": 1},
+        ],
+    ))
+    assert lotto["ricetta_modificata"] == 0
+
+
+def test_obbligatoria_mancante_marca_ancora_ricetta_modificata(conn):
+    _semilavorato_uova(conn)
+    # SOLO semilavorato facoltativo, il latte (obbligatorio) manca: il verbale è modificato
+    lotto = registra_produzione(conn, produzione_crema(
+        consumi=[{"origine": "ingresso", "lotto_origine_id": 102, "quantita_usata": 1}],
+    ))
+    assert lotto["ricetta_modificata"] == 1
+
+
 def test_giacenza_insufficiente_respinta(conn):
     prima = dict(conn.execute(
         "SELECT quantita_residua FROM lotti_ingresso WHERE id = 100"

@@ -52,7 +52,8 @@ def dettaglio_ricetta(conn, prodotto_id):
     ).fetchone()
     righe = [
         dict(r) for r in conn.execute(
-            "SELECT rr.ingrediente_id, rr.quantita, rr.um_scritta, p.nome, "
+            "SELECT rr.ingrediente_id, rr.quantita, rr.um_scritta, "
+            "rr.facoltativa, p.nome, "
             "p.unita_misura AS um, p.densita, "
             "fr.nome AS famiglia_ingrediente "
             "FROM ricette_righe rr "
@@ -186,7 +187,9 @@ def salva_ricetta(conn, dati):
 
     dati: prodotto_id, famiglia_id | famiglia_nuova, resa?, procedimento?,
           righe [{ingrediente_id, quantita}]
-    Le righe rimpiazzano le vecchie: la ricetta è il master.
+    Righe rimpiazzano le vecchie: la ricetta è il master. RIFIN 56: una
+          riga può essere facoltativa (semilavorato facoltativo: crema al pistacchio
+          delle brioches): si usa SOLO nelle produzioni che la prevedono.
     """
     prodotto_id = dati.get("prodotto_id")
     prodotto = conn.execute(
@@ -251,11 +254,14 @@ def salva_ricetta(conn, dati):
             righe_ok.append({
                 "ingrediente_id": ing["id"], "quantita": qta,
                 "um_scritta": um_scritta,
+                # RIFIN 56: semilavorato facoltativo (1/0)
+                "facoltativa": 1 if r.get("facoltativa") else 0,
             })
         else:
             righe_ok.append({
                 "ingrediente_id": ing["id"], "quantita": qta,
                 "um_scritta": None,
+                "facoltativa": 1 if r.get("facoltativa") else 0,
             })
 
     famiglia_id = _risolvi_famiglia(conn, dati)
@@ -283,9 +289,9 @@ def salva_ricetta(conn, dati):
     for r in righe_ok:
         conn.execute(
             "INSERT INTO ricette_righe (ricetta_id, ingrediente_id, quantita, "
-            "um_scritta) VALUES (?, ?, ?, ?)",
+            "um_scritta, facoltativa) VALUES (?, ?, ?, ?, ?)",
             (ricetta_id, r["ingrediente_id"], float(r["quantita"]),
-             r["um_scritta"]),
+             r["um_scritta"], r["facoltativa"]),
         )
     # La famiglia NASCE nella ricetta e l'anagrafica del prodotto la rispecchia
     # (così combo e filtri, che leggono l'anagrafica, la vedono subito).

@@ -590,3 +590,32 @@ def test_fantasma_reuse_eredita_densita(conn):
     p = crea_ingrediente(conn, {"nome": "Latte crudo", "conservazione": "Frigo",
                                 "unita_misura": "lt"}, da_anagrafica=False)
     assert p["densita"] == 1.03
+
+
+# ---- RIFIN 58: flag "semilavorato" (solo dichiarativo, badge anagrafica) ----
+
+def test_crea_ingrediente_semilavorato_e_ritornato_dal_dettaglio(conn):
+    p = crea_ingrediente(conn, {
+        "nome": "Crema al pistacchio", "conservazione": "Frigo",
+        "unita_misura": "kg",
+        "denominazione_legale": "pistacchio, zucchero, olio di girasole",
+        "semilavorato": True,
+    }, da_anagrafica=True)
+    assert p["semilavorato"] == 1
+    # e la lista ingredienti lo porta (badge in tabella)
+    riga = [x for x in lista_ingredienti(conn) if x["id"] == p["id"]]
+    assert riga and riga[0]["semilavorato"] == 1
+
+
+def test_salva_prodotto_modifica_il_flag_semilavorato(conn):
+    p = crea_ingrediente(conn, {
+        "nome": "Crema al pistacchio", "conservazione": "Frigo",
+        "unita_misura": "kg",
+        "denominazione_legale": "pistacchio, zucchero, olio di girasole",
+    }, da_anagrafica=True)
+    assert p["semilavorato"] == 0
+    q = salva_prodotto(conn, {**INGREDIENTE, "id": p["id"],
+                              "nome": "Crema al pistacchio",
+                              "denominazione_legale": "pistacchio, zucchero, olio di girasole",
+                              "semilavorato": True})
+    assert q["semilavorato"] == 1

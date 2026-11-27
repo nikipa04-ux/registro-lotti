@@ -394,11 +394,12 @@ def crea_ingrediente(conn, dati, da_anagrafica=False):
         conn.execute(
             "UPDATE prodotti SET nome = ?, conservazione = ?, unita_misura = ?, "
             "sigla = ?, marca = ?, denominazione_legale = ?, densita = ?, "
-            "note = ? WHERE id = ?",
+            "semilavorato = ?, note = ? WHERE id = ?",
             (nome, conservazione, um,
              (dati.get("sigla") or "").strip().upper() or None,
              (dati.get("marca") or "").strip() or None,
-             denominazione, densita, (dati.get("note") or "").strip() or None, pid),
+             denominazione, densita, 1 if dati.get("semilavorato") else 0,
+             (dati.get("note") or "").strip() or None, pid),
         )
     elif gia:
         # nome già preso da un'anagrafica VERA: il messaggio dice cos'è
@@ -412,12 +413,13 @@ def crea_ingrediente(conn, dati, da_anagrafica=False):
     else:
         cur = conn.execute(
             "INSERT INTO prodotti (nome, famiglia_id, conservazione, unita_misura, "
-            "sigla, marca, denominazione_legale, densita, note) "
-            "VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)",
+            "sigla, marca, denominazione_legale, densita, semilavorato, note) "
+            "VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
             (nome, conservazione, um,
              (dati.get("sigla") or "").strip().upper() or None,
              (dati.get("marca") or "").strip() or None,
-             denominazione, densita, (dati.get("note") or "").strip() or None),
+             denominazione, densita, 1 if dati.get("semilavorato") else 0,
+             (dati.get("note") or "").strip() or None),
         )
         pid = cur.lastrowid
     for a in allergeni:
@@ -461,8 +463,9 @@ def salva_prodotto(conn, dati):
         conn.execute(
             "UPDATE prodotti SET nome = ?, conservazione = ?, unita_misura = ?, "
             "sigla = ?, marca = ?, denominazione_legale = ?, densita = ?, "
-            "note = ? WHERE id = ?",
-            (nome, conservazione, um, sigla, marca, denominazione, densita, note, pid),
+            "semilavorato = ?, note = ? WHERE id = ?",
+            (nome, conservazione, um, sigla, marca, denominazione, densita,
+             1 if dati.get("semilavorato") else 0, note, pid),
         )
         conn.execute(
             "DELETE FROM prodotti_allergeni WHERE prodotto_id = ?", (pid,)

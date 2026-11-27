@@ -141,7 +141,8 @@ def proponi_produzione(conn, prodotto_id, oggi=None):
 
     righe = []
     for r in conn.execute(
-        "SELECT rr.ingrediente_id, rr.quantita, rr.um_scritta, p.nome, "
+        "SELECT rr.ingrediente_id, rr.quantita, rr.um_scritta, rr.facoltativa, "
+        "p.nome, "
         "p.unita_misura, p.densita, fr.nome AS famiglia "
         "FROM ricette_righe rr "
         "JOIN prodotti p ON p.id = rr.ingrediente_id "
@@ -165,6 +166,10 @@ def proponi_produzione(conn, prodotto_id, oggi=None):
             "um_scritta": r["um_scritta"],
             "densita": r["densita"],
             "famiglia": r["famiglia"],
+            # RIFIN 56: riga SEMILAVORATO FACOLTATIVO: l'operatore la usa o
+            # la esclude col solito ✕ senza che il verbale risulti
+            # «ricetta modificata» (variare il semilavorato facoltativo è previsto)
+            "facoltativa": bool(r["facoltativa"]),
             "qta_ricetta": r["quantita"],
             "lotti": [
                 {"id": l["id"], "codice_lotto": l["codice_lotto"],
@@ -314,13 +319,25 @@ def registra_produzione(conn, dati):
     # contano (l'operatore corregge di continuo); un ingrediente AGGIUNTO o
     # una riga ESCLUSA sì. Il confronto avviene QUI, al verbale: la ricetta
     # può cambiare nei giorni dopo, il lotto dice com'è andata quel giorno.
-    della_ricetta = {
+    # RIFIN 56: le FARCITURE (righe facoltative della ricetta) non fanno
+    # scattare lo snapshot «ricetta modificata»: variare il semilavorato è
+    # previsto per natura (brioche base + ripieno che cambia). Contano
+    # le righe OBBLIGATORIE (tutte e sole) e ciò che finisce FUORI ricetta.
+    obbligatorie = {
         r["ingrediente_id"] for r in conn.execute(
-            "SELECT ingrediente_id FROM ricette_righe WHERE ricetta_id = ?",
+            "SELECT ingrediente_id FROM ricette_righe "
+            "WHERE ricetta_id = ? AND COALESCE(facoltativa, 0) = 0",
             (ricetta["id"],),
         ).fetchall()
     }
-    ricetta_modificata = 1 if usati != della_ricetta else 0
+    facoltative = {
+        r["ingrediente_id"] for r in conn.execute(
+            "SELECT ingrediente_id FROM ricette_righe "
+            "WHERE ricetta_id = ? AND COALESCE(facoltativa, 0) = 1",
+            (ricetta["id"],),
+        ).fetchall()
+    }
+    ricetta_modificata = 1 if (usati - facoltative) != obbligatorie else 0
 
     # Famiglia SNAPSHOT: quella della ricetta master (la produzione può
     # dichiararne una diversa, che vale solo per questo lotto)

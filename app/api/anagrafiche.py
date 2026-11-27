@@ -164,6 +164,7 @@ class NuovoIngrediente(BaseModel):
     marca: str | None = None
     denominazione_legale: str | None = None
     densita: float | None = None   # g/ml (RIFIN 51): ponte peso<->volume
+    semilavorato: bool = False   # RIFIN 58: solo dichiarativo, badge anagrafica
     note: str | None = None
     allergeni: list[int] = []
 
@@ -189,6 +190,7 @@ class SalvaProdotto(BaseModel):
     marca: str | None = None
     denominazione_legale: str | None = None
     densita: float | None = None   # g/ml (RIFIN 51): ponte peso<->volume
+    semilavorato: bool = False   # RIFIN 58: solo dichiarativo, badge anagrafica
     note: str | None = None
     allergeni: list[int] | None = None
 

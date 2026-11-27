@@ -104,7 +104,8 @@ def schede_ricette(conn):
     for ric in ricette:
         righe = []
         for r in conn.execute(
-            "SELECT rr.ingrediente_id, rr.quantita, rr.um_scritta, p.nome, "
+            "SELECT rr.ingrediente_id, rr.quantita, rr.um_scritta, "
+            "rr.facoltativa, p.nome, "
             "p.denominazione_legale, p.unita_misura AS um, p.densita, "
             "(SELECT COUNT(*) FROM ricette r2 "
             " WHERE r2.prodotto_id = rr.ingrediente_id) AS n_ricetta "
@@ -129,6 +130,9 @@ def schede_ricette(conn):
                 "quantita": qta,
                 "um": um_riga,
                 "semilavorato": r["n_ricetta"] > 0,
+                # RIFIN 56: il semilavorato facoltativo resta nella lista come
+                # le altre righe, con la scritta (facoltativa) accanto
+                "facoltativa": bool(r["facoltativa"]),
                 "parti": [],
                 "_denominazione": r["denominazione_legale"],
             })
@@ -172,7 +176,9 @@ def _blocchi_scheda(s):
         righe_ing = []
         for r in s["righe"]:
             righe_ing.extend(_spezza(
-                "- " + r["nome"] + " · " + _qt(r["quantita"]) +
+                "- " + r["nome"] +
+                (" (facoltativa)" if r.get("facoltativa") else "") + " · " +
+                _qt(r["quantita"]) +
                 (" " + r["um"] if r["um"] else ""),
                 "F1", 9.5, LARGH_UTILE))
             # RIFIN 44, composti: le parti della denominazione legale come
